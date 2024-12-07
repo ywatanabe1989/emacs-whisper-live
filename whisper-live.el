@@ -1,7 +1,7 @@
 ;;; -*- lexical-binding: t -*-
-;;; Author: 2024-12-07 11:42:37
-;;; Time-stamp: <2024-12-07 11:42:37 (ywatanabe)>
-;;; File: ./.dotfiles/.emacs.d/lisp/whisper-live/whisper-live.el
+;;; Author: 2024-12-07 16:42:18
+;;; Time-stamp: <2024-12-07 16:42:18 (ywatanabe)>
+;;; File: ./whisper-live/whisper-live.el
 
 
 ;;; whisper-live.el --- Real-time speech transcription using Whisper -*- lexical-binding: t; -*-
@@ -69,25 +69,75 @@
   :type 'string
   :group 'whisper-live)
 
-(defcustom whisper-live-anthropic-engine "claude-3-5-haiku-20241022"
+;; (defcustom whisper-live-anthropic-engine "claude-3-5-haiku-20241022"
+;;   "Model engine for Anthropic Claude."
+;;   :type 'string
+;;   :group 'whisper-live)
+
+(defcustom whisper-live-anthropic-engine (getenv "ANTHROPIC_ENGINE")
   "Model engine for Anthropic Claude."
   :type 'string
   :group 'whisper-live)
 
-(defcustom whisper-live-clean-with-llm t
-  "Whether to clean transcriptions using LLM."
+(defcustom whisper-live-clean-with-llm nil
+  "Whether to clean transcriptions using LLM (AI language model).
+When enabled, transcriptions will be post-processed by an LLM to improve accuracy."
   :type 'boolean
-  :group 'whisper-live)
+  :group 'whisper-live
+  :safe #'booleanp)
 
-(defcustom whisper-live-start-tag "Whisper Transcription ==> "
-  "Tag to prepend at start of transcription."
-  :type 'string
-  :group 'whisper-live)
+;; (defcustom whisper-live-start-tag "Whisper => "
+;;   "Tag to prepend at start of transcription."
+;;   :type 'string
+;;   :group 'whisper-live)
 
-(defcustom whisper-live-end-tag " <== Whisper Transcription"
-  "Tag to append at end of transcription."
-  :type 'string
-  :group 'whisper-live)
+;; (defcustom whisper-live-end-tag " <= Whisper"
+;;   "Tag to append at end of transcription."
+;;   :type 'string
+;;   :group 'whisper-live)
+
+(defvar whisper-live-start-tag (whisper-live--get-start-tag)
+  "Tag to prepend at start of transcription.")
+
+(defvar whisper-live-end-tag (whisper-live--get-end-tag)
+  "Tag to append at end of transcription.")
+
+(defvar whisper-live-llm-prompt
+  "Clean up the following raw text transcribed from audio. Fix minor errors to produce natural language output. As long as meaning is remained, you can revise as a English native speaker. Respond with only the corrected text and NEVER INCLUDE YOUR COMMENTS. Now, the raw transcription is as follows: \n"
+  "Prompt text used for LLM-based transcription cleanup.")
+
+(defun whisper-live--get-start-tag ()
+  "Get start tag based on LLM setting."
+  (let ((tag (concat (if whisper-live-clean-with-llm
+                        (concat whisper-live-start-tag-base " + LLM")
+                      whisper-live-start-tag-base)
+                    " => ")))
+    (message "Generated start tag: %s (LLM: %s)" tag whisper-live-clean-with-llm)
+    tag))
+
+(defun whisper-live--get-end-tag ()
+  "Get end tag based on LLM setting."
+  (let ((tag (concat " <= " (if whisper-live-clean-with-llm
+                               (concat whisper-live-end-tag-base " + LLM")
+                             whisper-live-end-tag-base))))
+    (message "Generated end tag: %s (LLM: %s)" tag whisper-live-clean-with-llm)
+    tag))
+
+(defun whisper-live--update-tags ()
+  "Update tags based on current LLM setting."
+  (setq whisper-live-start-tag (whisper-live--get-start-tag)
+        whisper-live-end-tag (whisper-live--get-end-tag))
+  (message "Tags updated - Start: %s, End: %s"
+           whisper-live-start-tag
+           whisper-live-end-tag))
+
+(add-variable-watcher 'whisper-live-clean-with-llm
+                     (lambda (sym newval op where)
+                       (message "LLM setting changed to: %s" newval)
+                       (whisper-live--update-tags)))
+
+(whisper-live--update-tags)
+
 
 (defun whisper-live--ensure-directory ()
   "Ensure chunks directory exists."
@@ -207,28 +257,78 @@
                                     (regexp-quote whisper-live-end-tag))
                             "" text)))
 
+;; (defun whisper-live--clean-raw-transcription-with-llm (raw-transcription)
+;;   (condition-case err
+;;       (let* ((full-prompt (concat "(Clean and correct the raw text described from audio chunks. If you do not find suitable answer, please just return empty string. NEVER INCLUDE ANY COMMENTS OTHER THAN THE REVISED TRANSCRIPTION): " raw-transcription))
+;;              (response (request
+;;                        "https://api.anthropic.com/v1/messages"
+;;                        :type "POST"
+;;                        :headers `(("content-type" . "application/json")
+;;                                 ("x-api-key" . ,whisper-live-anthropic-key)
+;;                                 ("anthropic-version" . "2023-06-01"))
+;;                        :data (json-encode
+;;                              `(("model" . ,whisper-live-anthropic-engine)
+;;                                ("max_tokens" . 2048)
+;;                                ("messages" . [,(list (cons "role" "user")
+;;                                                    (cons "content" full-prompt))])))
+;;                        :parser 'json-read
+;;                        :sync t
+;;                        :silent t))
+;;              (resp-data (request-response-data response)))
+;;         (when resp-data
+;;           (alist-get 'text (aref (alist-get 'content resp-data) 0))))
+;;     (error
+;;      raw-transcription)))
+
+
+;; (defun whisper-live--clean-raw-transcription-with-llm (raw-transcription)
+;;   (condition-case err
+;;       (let* ((full-prompt (concat whisper-live-llm-prompt raw-transcription))
+;;              (response (request
+;;                        "https://api.anthropic.com/v1/messages"
+;;                        :type "POST"
+;;                        :headers `(("content-type" . "application/json")
+;;                                 ("x-api-key" . ,whisper-live-anthropic-key)
+;;                                 ("anthropic-version" . "2023-06-01"))
+;;                        :data (json-encode
+;;                              `(("model" . ,whisper-live-anthropic-engine)
+;;                                ("max_tokens" . 2048)
+;;                                ("messages" . [,(list (cons "role" "user")
+;;                                                    (cons "content" full-prompt))])))
+;;                        :parser 'json-read
+;;                        :sync t
+;;                        :silent t))
+;;              (resp-data (request-response-data response)))
+;;         (when resp-data
+;;           (alist-get 'text (aref (alist-get 'content resp-data) 0))))
+;;     (error
+;;      raw-transcription)))
+
+
 (defun whisper-live--clean-raw-transcription-with-llm (raw-transcription)
-  (condition-case err
-      (let* ((full-prompt (concat "Clean this raw transcript. If you do not find suitable answer, please just return empty string: " raw-transcription))
-             (response (request
-                       "https://api.anthropic.com/v1/messages"
-                       :type "POST"
-                       :headers `(("content-type" . "application/json")
-                                ("x-api-key" . ,whisper-live-anthropic-key)
-                                ("anthropic-version" . "2023-06-01"))
-                       :data (json-encode
-                             `(("model" . ,whisper-live-anthropic-engine)
-                               ("max_tokens" . 2048)
-                               ("messages" . [,(list (cons "role" "user")
-                                                   (cons "content" full-prompt))])))
-                       :parser 'json-read
-                       :sync t
-                       :silent t))
-             (resp-data (request-response-data response)))
-        (when resp-data
-          (alist-get 'text (aref (alist-get 'content resp-data) 0))))
-    (error
-     raw-transcription)))
+  (if (string-empty-p raw-transcription)
+      raw-transcription
+    (condition-case err
+        (let* ((full-prompt (concat whisper-live-llm-prompt raw-transcription))
+               (response (request
+                         "https://api.anthropic.com/v1/messages"
+                         :type "POST"
+                         :headers `(("content-type" . "application/json")
+                                  ("x-api-key" . ,whisper-live-anthropic-key)
+                                  ("anthropic-version" . "2023-06-01"))
+                         :data (json-encode
+                               `(("model" . ,whisper-live-anthropic-engine)
+                                 ("max_tokens" . 2048)
+                                 ("messages" . [,(list (cons "role" "user")
+                                                     (cons "content" full-prompt))])))
+                         :parser 'json-read
+                         :sync t
+                         :silent t))
+               (resp-data (request-response-data response)))
+          (when resp-data
+            (alist-get 'text (aref (alist-get 'content resp-data) 0))))
+      (error
+       raw-transcription))))
 
 (defun whisper-live-overwrite--raw-transcription (new-text)
   "Replace text between transcription tags with NEW-TEXT."
@@ -236,33 +336,14 @@
     (delete-region (car tags) (cdr tags))
     (goto-char (car tags))
     (insert new-text)))
-
-(defun whisper-live--clean-transcript-after-stop ()
-  "Clean transcript after stopping recording."
-  (let* ((raw-text (whisper-live-extract--raw-transcription)))
-    (when raw-text
-      (run-with-timer 1 nil
-                      (lambda ()
-                        (let ((final-text (whisper-live--clean-raw-transcription-with-llm raw-text)))
-                        ;; (let ((final-text "THIS WILL BE THE OUTPUT OF LLM"))
-                          (when final-text
-                            (whisper-live-overwrite--raw-transcription final-text))))))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defun whisper-live-clear-buffer ()
-  "Clear the transcription buffer."
-  (interactive)
-  (with-current-buffer (get-buffer-create whisper-live-buffer-name)
-    (erase-buffer)))
-
-
 ;;;###autoload
 (defun whisper-live-run ()
   "Toggle real-time audio transcription.
 If transcription is running, stops it.
 If not running, starts new transcription session."
   (interactive)
+  (whisper-live--update-tags)
   (if whisper-live--current-process
       (whisper-live-stop)
     (if whisper-install-whispercpp
@@ -275,8 +356,31 @@ If not running, starts new transcription session."
             (whisper-live-start)
           (error (format "Couldn't find %s in PATH, nor is it a file" command)))))))
 
-;; Add keyboard quit hook
-(add-hook 'keyboard-quit-hook #'whisper-live-stop)
+(defun whisper-live--clean-transcript-after-stop ()
+  "Clean transcript after stopping recording."
+  (let ((raw-text (whisper-live-extract--raw-transcription)))
+    (when raw-text
+      (let ((final-text (if whisper-live-clean-with-llm
+                           (whisper-live--clean-raw-transcription-with-llm raw-text)
+                           raw-text)))
+        (when final-text
+          (whisper-live-overwrite--raw-transcription final-text))))))
+
+(defun whisper-live--cleanup ()
+  "Clean up all whisper-live resources."
+  (interactive)
+  (when whisper-live--current-process
+    (ignore-errors (delete-process whisper-live--current-process)))
+  (setq whisper-live--current-process nil)
+  (when whisper-live--insert-marker
+    (set-marker whisper-live--insert-marker nil))
+  (setq whisper-live--text-queue nil
+        whisper-live--target-buffer nil)
+  (when (file-exists-p whisper-live--chunks-directory)
+    (ignore-errors (delete-directory whisper-live--chunks-directory t))))
+
+;; Add to keyboard quit hook
+(add-hook 'keyboard-quit-hook #'whisper-live--cleanup)
 
 (provide 'whisper-live)
 
