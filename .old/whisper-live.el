@@ -1,0 +1,1 @@
+.whisper-live-versions/whisper-live_v005.el
