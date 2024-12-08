@@ -1,6 +1,6 @@
 ;;; -*- lexical-binding: t -*-
 ;;; Author: 2024-12-07 16:42:18
-;;; Time-stamp: <2024-12-08 11:13:31 (ywatanabe)>
+;;; Time-stamp: <2024-12-08 11:20:11 (ywatanabe)>
 ;;; File: ./whisper-live/whisper-live.el
 
 
@@ -134,7 +134,7 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
 
 (whisper-live--update-tags)
 
-(defvar whisper--temp-file (make-temp-file "whisper-"))
+(defvar whisper--temp-file (make-temp-file (whisper-live--generate-chunk-filename)))
 
 (defun whisper-live--ensure-directory ()
   "Ensure chunks directory exists."
