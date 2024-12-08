@@ -1,6 +1,6 @@
 ;;; -*- lexical-binding: t -*-
 ;;; Author: 2024-12-07 16:42:18
-;;; Time-stamp: <2024-12-08 11:20:11 (ywatanabe)>
+;;; Time-stamp: <2024-12-08 13:38:19 (ywatanabe)>
 ;;; File: ./whisper-live/whisper-live.el
 
 
@@ -42,6 +42,9 @@
   "Name of the buffer where real-time transcription appears."
   :type 'string
   :group 'whisper)
+
+(defvar whisper-live--initialized nil
+  "Flag indicating whether whisper has been initialized.")
 
 (defvar whisper-live--current-process nil
   "Current recording process.")
@@ -102,7 +105,7 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
                          (concat whisper-live-start-tag-base " + LLM")
                        whisper-live-start-tag-base)
                      " => ")))
-    (message "Generated start tag: %s (LLM: %s)" tag whisper-live-clean-with-llm)
+    ;; (message "Generated start tag: %s (LLM: %s)" tag whisper-live-clean-with-llm)
     tag))
 
 (defun whisper-live--get-end-tag ()
@@ -110,7 +113,7 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   (let ((tag (concat " <= " (if whisper-live-clean-with-llm
                                 (concat whisper-live-end-tag-base " + LLM")
                               whisper-live-end-tag-base))))
-    (message "Generated end tag: %s (LLM: %s)" tag whisper-live-clean-with-llm)
+    ;; (message "Generated end tag: %s (LLM: %s)" tag whisper-live-clean-with-llm)
     tag))
 
 (defvar whisper-live-start-tag (whisper-live--get-start-tag)
@@ -123,14 +126,15 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   "Update tags based on current LLM setting."
   (setq whisper-live-start-tag (whisper-live--get-start-tag)
         whisper-live-end-tag (whisper-live--get-end-tag))
-  (message "Tags updated - Start: %s, End: %s"
-           whisper-live-start-tag
-           whisper-live-end-tag))
+  ;; (message "Tags updated - Start: %s, End: %s"
+  ;;          whisper-live-start-tag
+  ;;          whisper-live-end-tag)
+  )
 
 (add-variable-watcher 'whisper-live-clean-with-llm
-                     (lambda (sym newval op where)
-                       (message "LLM setting changed to: %s" newval)
-                       (whisper-live--update-tags)))
+                      (lambda (sym newval op where)
+                        ;; (message "LLM setting changed to: %s" newval)
+                        (whisper-live--update-tags)))
 
 (whisper-live--update-tags)
 
@@ -181,15 +185,15 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
           (make-process
            :name "whisper-live-recording"
            :command `("ffmpeg"
-                     "-f" ,whisper--ffmpeg-input-format
-                     "-i" ,whisper--ffmpeg-input-device
-                     "-t" ,(number-to-string whisper-live-chunk-duration)
-                     "-ar" "16000"
-                     "-y" ,chunk-file)
+                      "-f" ,whisper--ffmpeg-input-format
+                      "-i" ,whisper--ffmpeg-input-device
+                      "-t" ,(number-to-string whisper-live-chunk-duration)
+                      "-ar" "16000"
+                      "-y" ,chunk-file)
            :sentinel (lambda (_process event)
-                      (when (string-equal "finished\n" event)
-                        (whisper-live--transcribe-chunk chunk-file)
-                        (whisper-live--record-chunk)))))))
+                       (when (string-equal "finished\n" event)
+                         (whisper-live--transcribe-chunk chunk-file)
+                         (whisper-live--record-chunk)))))))
 
 (defun whisper-live-start ()
   "Start real-time transcription."
@@ -219,7 +223,7 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
     (set-marker whisper-live--insert-marker nil))
   (when (file-exists-p whisper-live--chunks-directory)
     (delete-directory whisper-live--chunks-directory t))
-  (message "[-] Stopped."))
+  (message "Stopped."))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; LLM
@@ -238,10 +242,10 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   "Extract text between transcription tags."
   (interactive)
   (when-let ((tags (whisper--live-find-tags)))
-    (message "Found tags: %S" tags)
+    ;; (message "Found tags: %S" tags)
     (let* ((text (buffer-substring-no-properties (car tags) (cdr tags)))
            (cleaned-text (whisper--live-remove-tags text)))
-      (message "Extracted text: '%s'" cleaned-text)
+      ;; (message "Extracted text: '%s'" cleaned-text)
       cleaned-text)))
 ;; (whisper-live-extract--raw-transcription)
 
@@ -250,9 +254,9 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   (interactive)
   (when text
     (replace-regexp-in-string (format "%s\\|%s"
-                                    (regexp-quote whisper-live-start-tag)
-                                    (regexp-quote whisper-live-end-tag))
-                            "" text)))
+                                      (regexp-quote whisper-live-start-tag)
+                                      (regexp-quote whisper-live-end-tag))
+                              "" text)))
 
 ;; (defun whisper-live--clean-raw-transcription-with-llm (raw-transcription)
 ;;   (condition-case err
@@ -308,19 +312,19 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
     (condition-case err
         (let* ((full-prompt (concat whisper-live-llm-prompt raw-transcription))
                (response (request
-                         "https://api.anthropic.com/v1/messages"
-                         :type "POST"
-                         :headers `(("content-type" . "application/json")
-                                  ("x-api-key" . ,whisper-live-anthropic-key)
-                                  ("anthropic-version" . "2023-06-01"))
-                         :data (json-encode
-                               `(("model" . ,whisper-live-anthropic-engine)
-                                 ("max_tokens" . 2048)
-                                 ("messages" . [,(list (cons "role" "user")
-                                                     (cons "content" full-prompt))])))
-                         :parser 'json-read
-                         :sync t
-                         :silent t))
+                           "https://api.anthropic.com/v1/messages"
+                           :type "POST"
+                           :headers `(("content-type" . "application/json")
+                                      ("x-api-key" . ,whisper-live-anthropic-key)
+                                      ("anthropic-version" . "2023-06-01"))
+                           :data (json-encode
+                                  `(("model" . ,whisper-live-anthropic-engine)
+                                    ("max_tokens" . 2048)
+                                    ("messages" . [,(list (cons "role" "user")
+                                                          (cons "content" full-prompt))])))
+                           :parser 'json-read
+                           :sync t
+                           :silent t))
                (resp-data (request-response-data response)))
           (when resp-data
             (alist-get 'text (aref (alist-get 'content resp-data) 0))))
@@ -340,6 +344,7 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
 If transcription is running, stops it.
 If not running, starts new transcription session."
   (interactive)
+  (whisper-live--init)
   (whisper-live--update-tags)
   (if whisper-live--current-process
       (whisper-live-stop)
@@ -358,8 +363,8 @@ If not running, starts new transcription session."
   (let ((raw-text (whisper-live-extract--raw-transcription)))
     (when raw-text
       (let ((final-text (if whisper-live-clean-with-llm
-                           (whisper-live--clean-raw-transcription-with-llm raw-text)
-                           raw-text)))
+                            (whisper-live--clean-raw-transcription-with-llm raw-text)
+                          raw-text)))
         (when final-text
           (whisper-live-overwrite--raw-transcription final-text))))))
 
@@ -375,6 +380,47 @@ If not running, starts new transcription session."
         whisper-live--target-buffer nil)
   (when (file-exists-p whisper-live--chunks-directory)
     (ignore-errors (delete-directory whisper-live--chunks-directory t))))
+
+
+
+;; (defun whisper-live--init ()
+;;   "Initialize whisper by running it for 1 second to ensure stable startup."
+;;   (when (not whisper-live--initialized)
+;;     (let ((whisper-buffer-name "*Whisper-Live-Init*"))
+;;       (with-current-buffer (get-buffer-create whisper-buffer-name)
+;;         (whisper-run)
+;;         (sleep-for 1)
+;;         (whisper-run)
+;;         (kill-buffer whisper-buffer-name)))
+;;     (setq whisper-live--initialized t)))
+
+;; (defun whisper-live--init ()
+;;   "Initialize whisper by running it twice to ensure stable startup."
+;;   (when (not whisper-live--initialized)
+;;     (let ((whisper-buffer-name "*Whisper-Live-Init*")
+;;           (inhibit-message t)
+;;           (message-log-max nil))
+;;       (with-current-buffer (get-buffer-create whisper-buffer-name)
+;;         (whisper-run)
+;;         (sleep-for 1)
+;;         (whisper-run)
+;;         (kill-buffer whisper-buffer-name)))
+;;     (setq whisper-live--initialized t)))
+
+(defun whisper-live--init ()
+  "Initialize whisper by running it twice to ensure stable startup."
+  (when (not whisper-live--initialized)
+    (let ((whisper-buffer-name "*Whisper-Live-Init*")
+          (inhibit-message t)
+          (message-log-max nil))
+      (with-current-buffer (get-buffer-create whisper-buffer-name)
+        (advice-add 'whisper--error :override #'ignore)
+        (whisper-run)
+        (sleep-for 1)
+        (whisper-run)
+        (advice-remove 'whisper--error #'ignore)
+        (kill-buffer whisper-buffer-name)))
+    (setq whisper-live--initialized t)))
 
 ;; Add to keyboard quit hook
 (add-hook 'keyboard-quit-hook #'whisper-live--cleanup)
