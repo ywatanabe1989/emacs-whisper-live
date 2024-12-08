@@ -1,6 +1,6 @@
 ;;; -*- lexical-binding: t -*-
 ;;; Author: 2024-12-07 16:42:18
-;;; Time-stamp: <2024-12-08 17:22:49 (ywatanabe)>
+;;; Time-stamp: <2024-12-08 17:07:12 (ywatanabe)>
 ;;; File: ./whisper-live/whisper-live.el
 
 
@@ -34,9 +34,23 @@
 (require 'cl-lib)
 
 (defvar whisper--temp-file (make-temp-file (whisper-live--generate-chunk-filename)))
+;; (defcustom whisper-live-recording-id (whisper-live--generate-recording-id)
+;;   "Recording ID to concatenate wav files."
+;;   :type 'integer
+;;   :group 'whisper)
+
+;; (defun whisper-live--generate-recording-id ()
+;;   "Generate random recording ID between 0-999999."
+;;   (random 1000000))
+
 
 (defcustom whisper-live--max-history-seconds 15
   "Maximum duration of audio history to keep in seconds.")
+
+
+;; (defvar whisper-live--max-chunks 10
+;;   "Maximum number of chunks to keep for concatenation.")
+
 
 (defcustom whisper-live-chunk-duration 5
   "Duration of each audio chunk in seconds."
@@ -53,6 +67,10 @@
 
 (defvar whisper-live--current-process nil
   "Current recording process.")
+
+;; (defvar whisper-live--chunks-directory
+;;   (concat temporary-file-directory (format "whisper-live-chunks/%s/" whisper-live-recording-id))
+;;   "Directory to store temporary audio chunks.")
 
 (defun whisper-live--generate-chunks-directory ()
   "Directory to store temporary audio chunks."
@@ -75,11 +93,6 @@
   "Queue of recent transcriptions.")
 
 (defcustom whisper-live-max-history 10
-  "Maximum number of transcription chunks to keep in history."
-  :type 'integer
-  :group 'whisper)
-
-(defcustom whisper-live--max-chunks 30
   "Maximum number of transcription chunks to keep in history."
   :type 'integer
   :group 'whisper)
@@ -139,6 +152,7 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   (let ((tag (concat " <= " (if whisper-live-clean-with-llm
                                 (concat whisper-live-end-tag-base " + LLM")
                               whisper-live-end-tag-base))))
+    ;; (message "Generated end tag: %s (LLM: %s)" tag whisper-live-clean-with-llm)
     tag))
 
 (defvar whisper-live-start-tag (whisper-live--get-start-tag)
@@ -151,10 +165,14 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   "Update tags based on current LLM setting."
   (setq whisper-live-start-tag (whisper-live--get-start-tag)
         whisper-live-end-tag (whisper-live--get-end-tag))
+  ;; (message "Tags updated - Start: %s, End: %s"
+  ;;          whisper-live-start-tag
+  ;;          whisper-live-end-tag)
   )
 
 (add-variable-watcher 'whisper-live-clean-with-llm
                       (lambda (sym newval op where)
+                        ;; (message "LLM setting changed to: %s" newval)
                         (whisper-live--update-tags)))
 
 (whisper-live--update-tags)
@@ -171,6 +189,59 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   (format "%swhisper-chunk-%s.wav"
           whisper-live--chunks-directory
           (format-time-string "%Y%m%d-%H%M%S")))
+
+;; ;; Accumulates chunks of text at the last
+;; (defun whisper-live--transcribe-chunk (concatenated-file)
+;;   "Transcribe a single CONCATENATED-FILE."
+;;   (make-process
+;;    :name "whisper-live-transcribing"
+;;    :command (whisper-command concatenated-file)
+;;    :buffer (get-buffer-create "*Whisper Live*")
+;;    :sentinel (lambda (_process event)
+;;                (when (string-equal "finished\n" event)
+;;                  (with-current-buffer (get-buffer "*Whisper Live*")
+;;                    (goto-char (point-min))
+;;                    (when (re-search-forward "\n\n \\(.*\\)\n\n" nil t)
+;;                      (let ((text (match-string 1)))
+;;                        (when (and text (marker-buffer whisper-live--insert-marker))
+;;                          (with-current-buffer (marker-buffer whisper-live--insert-marker)
+;;                            (let ((start-pos (marker-position whisper-live--insert-marker)))
+;;                              ;; (when whisper-live--insert-end-marker
+;;                              ;;   (delete-region (+ whisper-live--insert-marker 1) whisper-live--insert-end-marker))
+;;                              (insert (whisper-live--clean-transcript text) " ")
+;;                              (let ((end-pos (point)))
+;;                                (set-marker whisper-live--insert-end-marker end-pos)
+;;                                (goto-char end-pos))))))))
+;;                  (kill-buffer "*Whisper Live*")))))
+
+;; ;; parallel but accumulating; is this really processing concatenated file? How can we organize the presentation of text; as duplicated text are accumulating in an awkward manner.
+;; (defun whisper-live--transcribe-chunk (concatenated-file)
+;;   "Transcribe a single CONCATENATED-FILE."
+;;   (message "Starting transcription of %s" concatenated-file)
+;;   (let ((cmd (whisper-command concatenated-file)))
+;;     (when (and cmd (car cmd))  ; Check if command is valid
+;;       (make-process
+;;        :name "whisper-live-transcribing"
+;;        :command cmd
+;;        :buffer (get-buffer-create "*Whisper Live*")
+;;        :sentinel (lambda (_process event)
+;;                    (message "Transcription process finished with: %s" event)
+;;                    (when (string-equal "finished\n" event)
+;;                      (with-current-buffer (get-buffer "*Whisper Live*")
+;;                        (let ((content (buffer-string)))
+;;                          (message "Whisper output: %s" content)
+;;                          (when (string-match "\n\n \\(.*\\)\n\n" content)
+;;                            (let ((text (match-string 1 content)))
+;;                              (message "Extracted text: %s" text)
+;;                              (when (and text (marker-buffer whisper-live--insert-marker))
+;;                                (with-current-buffer (marker-buffer whisper-live--insert-marker)
+;;                                  (save-excursion
+;;                                    (goto-char whisper-live--insert-marker)
+;;                                    (insert (whisper-live--clean-transcript text) " "))))))))
+;;                      (setq whisper-live--current-transcription nil)
+;;                      (whisper-live--process-transcription-queue)
+;;                      (kill-buffer "*Whisper Live*")))))))
+
 
 (defvar whisper-live--output-buffer nil
   "Buffer for storing whisper transcription output.")
@@ -203,6 +274,32 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   (push file whisper-live--transcription-queue)
   (whisper-live--process-transcription-queue))
 
+;; ;; accumulating
+;; (defun whisper-live--transcribe-chunk (concatenated-file)
+;;   "Transcribe a single CONCATENATED-FILE."
+;;   (message "Starting transcription of %s" concatenated-file)
+;;   (let ((cmd (whisper-command concatenated-file))
+;;         (temp-buffer (generate-new-buffer " *whisper-temp*")))
+;;     (when (and cmd (car cmd))
+;;       (make-process
+;;        :name "whisper-live-transcribing"
+;;        :command cmd
+;;        :buffer temp-buffer
+;;        :sentinel (lambda (_process event)
+;;                    (when (string-equal "finished\n" event)
+;;                      (let ((text (with-current-buffer temp-buffer
+;;                                    (when (string-match "\n\n \\(.*\\)\n\n" (buffer-string))
+;;                                      (match-string 1 (buffer-string))))))
+;;                        (when text
+;;                          (with-current-buffer (marker-buffer whisper-live--insert-marker)
+;;                            (save-excursion
+;;                              (goto-char whisper-live--insert-marker)
+;;                              (insert (whisper-live--clean-transcript text) " ")))))
+;;                      (setq whisper-live--current-transcription nil)
+;;                      (whisper-live--process-transcription-queue)
+;;                      (kill-buffer temp-buffer)))))))
+
+;; ;; a bit slow but work quitewell
 ;; (defun whisper-live--transcribe-chunk (concatenated-file)
 ;;   "Transcribe a single CONCATENATED-FILE."
 ;;   (message "Processing transcription: %s" concatenated-file)
@@ -247,15 +344,12 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
                      (let ((text (with-current-buffer temp-buffer
                                    (when (string-match "\n\n \\(.*\\)\n\n" (buffer-string))
                                      (match-string 1 (buffer-string))))))
-                       (when (and text
-                                  (not (string-empty-p (string-trim text)))
-                                  (not (string-match-p "^[[:space:].,]*$" text)))
+                       (when text
                          (with-current-buffer (marker-buffer whisper-live--insert-marker)
-                           (save-excursion
-                             (goto-char (point-min))
-                             (when (search-forward whisper-live-start-tag nil t)
-                               (delete-region (point) (point-max)))
-                             (insert (whisper-live--clean-transcript text) " ")))))
+                           (let ((inhibit-read-only t))
+                             (save-excursion
+                               (goto-char (point-max))
+                               (insert "\n" (whisper-live--clean-transcript text)))))))
                      (setq whisper-live--current-transcription nil)
                      (whisper-live--process-transcription-queue)
                      (kill-buffer temp-buffer)))))))
@@ -265,7 +359,10 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   (let* ((output-file (concat chunk-directory "combined.wav"))
          (chunk-files (directory-files chunk-directory t "whisper-chunk-.*\\.wav$"))
          (sorted-chunks (sort chunk-files #'string<))
-         (recent-chunks (last sorted-chunks whisper-live--max-chunks))
+         (chunks-to-keep (min (length sorted-chunks)
+                              (ceiling (/ whisper-live--max-history-seconds
+                                          whisper-live-chunk-duration))))
+         (recent-chunks (last sorted-chunks chunks-to-keep))
          (chunks-list (concat chunk-directory "chunks.txt")))
     (when recent-chunks
       (with-temp-file chunks-list
@@ -279,17 +376,80 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
                     "-y"
                     output-file)
       ;; Delete old chunks
-      (let ((old-chunks (butlast sorted-chunks whisper-live--max-chunks)))
+      (let ((old-chunks (butlast sorted-chunks chunks-to-keep)))
         (dolist (chunk old-chunks)
           (when (file-exists-p chunk)
             (delete-file chunk))))
       output-file)))
+
+;; a bit slow but work quitewell
+;; (defun whisper-live--concatenate-chunks (chunk-directory)
+;;   "Concatenate recent wav chunks in CHUNK-DIRECTORY into single file."
+;;   (let* ((output-file (concat chunk-directory "combined.wav"))
+;;          (chunk-files (directory-files chunk-directory t "whisper-chunk-.*\\.wav$"))
+;;          (sorted-chunks (sort chunk-files #'string<))
+;;          (recent-chunks (last sorted-chunks whisper-live--max-chunks))
+;;          (chunks-list (concat chunk-directory "chunks.txt")))
+;;     (when recent-chunks
+;;       (with-temp-file chunks-list
+;;         (dolist (chunk recent-chunks)
+;;           (insert (format "file '%s'\n" chunk))))
+;;       (call-process "ffmpeg" nil nil nil
+;;                     "-f" "concat"
+;;                     "-safe" "0"
+;;                     "-i" chunks-list
+;;                     "-c" "copy"
+;;                     "-y"
+;;                     output-file)
+;;       ;; Delete old chunks
+;;       (let ((old-chunks (butlast sorted-chunks whisper-live--max-chunks)))
+;;         (dolist (chunk old-chunks)
+;;           (when (file-exists-p chunk)
+;;             (delete-file chunk))))
+;;       output-file)))
 
 (defun whisper-live--clean-transcript (text)
   "Clean transcript TEXT by removing parenthetical and bracket expressions."
   (when text
     (let ((cleaned (replace-regexp-in-string "\\[.*?\\]\\|([^)]*)" "" text)))
       (string-trim cleaned))))
+
+;; (defun whisper-live--record-chunk ()
+;;   "Record a single audio chunk."
+;;   (let ((chunk-file (whisper-live--generate-chunk-filename)))
+;;     (setq whisper-live--current-process
+;;           (make-process
+;;            :name "whisper-live-recording"
+;;            :command `("ffmpeg"
+;;                       "-f" ,whisper--ffmpeg-input-format
+;;                       "-i" ,whisper--ffmpeg-input-device
+;;                       "-t" ,(number-to-string whisper-live-chunk-duration)
+;;                       "-ar" "16000"
+;;                       "-y" ,chunk-file)
+;;            :sentinel (lambda (_process event)
+;;                        (when (string-equal "finished\n" event)
+
+;;                          ;; (whisper-live--transcribe-chunk (whisper-live--concatenate-chunks whisper-live--chunks-directory))
+;;                          (whisper-live--transcribe-chunk chunk-file)
+;;                          (whisper-live--record-chunk)))))))
+
+;; (defun whisper-live--record-chunk ()
+;;   "Record a single audio chunk."
+;;   (let ((chunk-file (whisper-live--generate-chunk-filename)))
+;;     (setq whisper-live--current-process
+;;           (make-process
+;;            :name "whisper-live-recording"
+;;            :command `("ffmpeg"
+;;                       "-f" ,whisper--ffmpeg-input-format
+;;                       "-i" ,whisper--ffmpeg-input-device
+;;                       "-t" ,(number-to-string whisper-live-chunk-duration)
+;;                       "-ar" "16000"
+;;                       "-y" ,chunk-file)
+;;            :sentinel (lambda (_process event)
+;;                        (when (string-equal "finished\n" event)
+;;                          (let ((combined-file (whisper-live--concatenate-chunks whisper-live--chunks-directory)))
+;;                            (whisper-live--transcribe-chunk combined-file))
+;;                          (whisper-live--record-chunk)))))))
 
 (defvar whisper-live--transcription-queue '()
   "Queue of files waiting to be transcribed.")
