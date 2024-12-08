@@ -21,7 +21,7 @@ Real-time speech transcription in Emacs using Whisper.
 ## Installation & Configuration
 ```elisp
 (use-package whisper-live
-  :load-path "/home/ywatanabe/.emacs.d/lisp/whisper.el"  ; Changed to whisper-live path
+  :load-path "/home/ywatanabe/.emacs.d/lisp/whisper-live"  ; Changed to whisper-live path
   :after whisper
   :bind (("M-RET" . whisper-live-run)
          )
