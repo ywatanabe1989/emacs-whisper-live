@@ -1,6 +1,6 @@
 ;;; -*- lexical-binding: t -*-
 ;;; Author: 2024-12-07 16:42:18
-;;; Time-stamp: <2024-12-07 16:42:18 (ywatanabe)>
+;;; Time-stamp: <2024-12-08 11:13:31 (ywatanabe)>
 ;;; File: ./whisper-live/whisper-live.el
 
 
@@ -69,11 +69,6 @@
   :type 'string
   :group 'whisper-live)
 
-;; (defcustom whisper-live-anthropic-engine "claude-3-5-haiku-20241022"
-;;   "Model engine for Anthropic Claude."
-;;   :type 'string
-;;   :group 'whisper-live)
-
 (defcustom whisper-live-anthropic-engine (getenv "ANTHROPIC_ENGINE")
   "Model engine for Anthropic Claude."
   :type 'string
@@ -86,42 +81,43 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
   :group 'whisper-live
   :safe #'booleanp)
 
-;; (defcustom whisper-live-start-tag "Whisper => "
-;;   "Tag to prepend at start of transcription."
-;;   :type 'string
-;;   :group 'whisper-live)
-
-;; (defcustom whisper-live-end-tag " <= Whisper"
-;;   "Tag to append at end of transcription."
-;;   :type 'string
-;;   :group 'whisper-live)
-
-(defvar whisper-live-start-tag (whisper-live--get-start-tag)
-  "Tag to prepend at start of transcription.")
-
-(defvar whisper-live-end-tag (whisper-live--get-end-tag)
-  "Tag to append at end of transcription.")
-
 (defvar whisper-live-llm-prompt
   "Clean up the following raw text transcribed from audio. Fix minor errors to produce natural language output. As long as meaning is remained, you can revise as a English native speaker. Respond with only the corrected text and NEVER INCLUDE YOUR COMMENTS. Now, the raw transcription is as follows: \n"
   "Prompt text used for LLM-based transcription cleanup.")
 
+;; Tag
+(defcustom whisper-live-start-tag-base "Whisper"
+  "Tag to prepend at start of transcription."
+  :type 'string
+  :group 'whisper-live)
+
+(defcustom whisper-live-end-tag-base "Whisper"
+  "Tag to append at end of transcription."
+  :type 'string
+  :group 'whisper-live)
+
 (defun whisper-live--get-start-tag ()
   "Get start tag based on LLM setting."
   (let ((tag (concat (if whisper-live-clean-with-llm
-                        (concat whisper-live-start-tag-base " + LLM")
-                      whisper-live-start-tag-base)
-                    " => ")))
+                         (concat whisper-live-start-tag-base " + LLM")
+                       whisper-live-start-tag-base)
+                     " => ")))
     (message "Generated start tag: %s (LLM: %s)" tag whisper-live-clean-with-llm)
     tag))
 
 (defun whisper-live--get-end-tag ()
   "Get end tag based on LLM setting."
   (let ((tag (concat " <= " (if whisper-live-clean-with-llm
-                               (concat whisper-live-end-tag-base " + LLM")
-                             whisper-live-end-tag-base))))
+                                (concat whisper-live-end-tag-base " + LLM")
+                              whisper-live-end-tag-base))))
     (message "Generated end tag: %s (LLM: %s)" tag whisper-live-clean-with-llm)
     tag))
+
+(defvar whisper-live-start-tag (whisper-live--get-start-tag)
+  "Tag to prepend at start of transcription.")
+
+(defvar whisper-live-end-tag (whisper-live--get-end-tag)
+  "Tag to append at end of transcription.")
 
 (defun whisper-live--update-tags ()
   "Update tags based on current LLM setting."
@@ -138,6 +134,7 @@ When enabled, transcriptions will be post-processed by an LLM to improve accurac
 
 (whisper-live--update-tags)
 
+(defvar whisper--temp-file (make-temp-file "whisper-"))
 
 (defun whisper-live--ensure-directory ()
   "Ensure chunks directory exists."
