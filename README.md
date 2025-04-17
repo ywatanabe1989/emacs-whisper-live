@@ -1,4 +1,10 @@
 <!-- ---
+!-- Timestamp: 2025-04-18 07:03:51
+!-- Author: ywatanabe
+!-- File: /home/ywatanabe/.emacs.d/lisp/whisper-live/README.md
+!-- --- -->
+
+<!-- ---
 !-- title: ./whisper-live/README.md
 !-- author: ywatanabe
 !-- date: 2024-12-07 16:43:14
@@ -19,9 +25,16 @@ Real-time speech transcription in Emacs using Whisper.
 - (Optional) Anthropic API key for Claude enhancement
 
 ## Installation & Configuration
+
+#### [whisper.el](https://github.com/natrys/whisper.el)
+``` bash
+wget https://raw.githubusercontent.com/natrys/whisper.el/refs/heads/master/whisper.el ./src/whisper.el
+```
+
+#### whisper-live
 ```elisp
 (use-package whisper-live
-  :load-path "/home/ywatanabe/.emacs.d/lisp/whisper-live"  ; Changed to whisper-live path
+  :load-path "/path/to/this/directory"  ; Changed to whisper-live path
   :after whisper
   :bind (("M-RET" . whisper-live-run)
          )
@@ -48,3 +61,5 @@ M-x whisper-live-run
 
 ## Contact
 ywatanabe@alumni.u-tokyo.ac.jp
+
+<!-- EOF -->
