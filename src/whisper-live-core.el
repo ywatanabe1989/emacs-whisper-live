@@ -1,9 +1,10 @@
 ;;; -*- coding: utf-8; lexical-binding: t -*-
 ;;; Author: ywatanabe
-;;; Timestamp: <2025-04-18 07:00:43>
+;;; Timestamp: <2025-07-04 08:59:57>
 ;;; File: /home/ywatanabe/.emacs.d/lisp/whisper-live/src/whisper-live-core.el
 
 ;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@alumni.u-tokyo.ac.jp)
+
 
 (require 'whisper)
 
@@ -38,6 +39,16 @@
 (defvar whisper-live-transcribe-hook nil
   "Hook run after each transcription.")
 
+;; added but i am not sure whether this is useful than harmful
+
+(defvar whisper-live--transcription-queue nil
+  "Queue of files waiting to be transcribed.")
+
+;; added but i am not sure whether this is useful than harmful
+
+(defvar whisper-live--current-transcription nil
+  "Currently running transcription process.")
+
 ;; Core functions
 
 (defun whisper-live--cleanup ()
@@ -51,11 +62,20 @@
         whisper-live--transcription-text nil)
   (whisper-live--cleanup-markers))
 
+;; (defun whisper-live--cleanup-markers ()
+;;   "Clean up markers."
+;;   (when whisper-live--insert-marker
+;;     (set-marker whisper-live--insert-marker nil))
+;;   (when whisper-live--insert-end-marker
+;;     (set-marker whisper-live--insert-end-marker nil))
+;;   (setq whisper-live--insert-marker nil
+;;         whisper-live--insert-end-marker nil))
+
 (defun whisper-live--cleanup-markers ()
   "Clean up markers."
-  (when whisper-live--insert-marker
+  (when (markerp whisper-live--insert-marker)
     (set-marker whisper-live--insert-marker nil))
-  (when whisper-live--insert-end-marker
+  (when (markerp whisper-live--insert-end-marker)
     (set-marker whisper-live--insert-end-marker nil))
   (setq whisper-live--insert-marker nil
         whisper-live--insert-end-marker nil))
@@ -104,8 +124,6 @@
 
 (add-hook 'keyboard-quit-hook #'whisper-live--cleanup)
 
-(message "%s was loaded."
-         (file-name-nondirectory (or load-file-name buffer-file-name)))
 
 (provide 'whisper-live-core)
 

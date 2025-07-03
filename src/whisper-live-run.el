@@ -1,8 +1,12 @@
-;;; -*- lexical-binding: t -*-
-;;; Author: 2024-12-08 18:09:39
-;;; Time-stamp: <2024-12-08 19:20:40 (ywatanabe)>
-;;; File: ./whisper-live/src/whisper-live-run.el
+;;; -*- coding: utf-8; lexical-binding: t -*-
+;;; Author: ywatanabe
+;;; Timestamp: <2025-07-04 08:52:59>
+;;; File: /home/ywatanabe/.emacs.d/lisp/whisper-live/src/whisper-live-run.el
 
+;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@alumni.u-tokyo.ac.jp)
+
+
+;;; Time-stamp: <2024-12-08 19:20:40 (ywatanabe)>
 
 (require 'whisper-live-core)
 (require 'whisper-live-audio)
@@ -28,6 +32,11 @@
     (whisper-live--record-chunk)
     (message "Live transcription started")))
 
+
 (provide 'whisper-live-run)
 
-(message "%s was loaded." (file-name-nondirectory (or load-file-name buffer-file-name)))
+(when
+    (not load-file-name)
+  (message "whisper-live-run.el loaded."
+           (file-name-nondirectory
+            (or load-file-name buffer-file-name))))
