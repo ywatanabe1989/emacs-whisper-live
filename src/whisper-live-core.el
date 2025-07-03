@@ -1,6 +1,6 @@
 ;;; -*- coding: utf-8; lexical-binding: t -*-
 ;;; Author: ywatanabe
-;;; Timestamp: <2025-07-04 08:59:57>
+;;; Timestamp: <2025-07-04 09:03:50>
 ;;; File: /home/ywatanabe/.emacs.d/lisp/whisper-live/src/whisper-live-core.el
 
 ;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@alumni.u-tokyo.ac.jp)
@@ -39,12 +39,8 @@
 (defvar whisper-live-transcribe-hook nil
   "Hook run after each transcription.")
 
-;; added but i am not sure whether this is useful than harmful
-
 (defvar whisper-live--transcription-queue nil
   "Queue of files waiting to be transcribed.")
-
-;; added but i am not sure whether this is useful than harmful
 
 (defvar whisper-live--current-transcription nil
   "Currently running transcription process.")
