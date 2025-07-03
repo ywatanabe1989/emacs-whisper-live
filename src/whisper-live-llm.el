@@ -1,13 +1,18 @@
-;;; -*- lexical-binding: t -*-
-;;; Author: 2024-12-08 18:06:47
-;;; Time-stamp: <2024-12-08 19:17:19 (ywatanabe)>
-;;; File: ./whisper-live/src/whisper-live-llm.el
+;;; -*- coding: utf-8; lexical-binding: t -*-
+;;; Author: ywatanabe
+;;; Timestamp: <2025-07-04 08:52:56>
+;;; File: /home/ywatanabe/.emacs.d/lisp/whisper-live/src/whisper-live-llm.el
 
+;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@alumni.u-tokyo.ac.jp)
+
+
+;;; Time-stamp: <2024-12-08 19:17:19 (ywatanabe)>
 
 (require 'request)
 (require 'whisper-live-core)
 
-(defcustom whisper-live-anthropic-key (or (getenv "ANTHROPIC_API_KEY") "")
+(defcustom whisper-live-anthropic-key
+  (or (getenv "ANTHROPIC_API_KEY") "")
   "API key for Anthropic Claude. Defaults to ANTHROPIC_API_KEY environment variable."
   :type 'string
   :group 'whisper-live)
@@ -69,9 +74,13 @@
   "Find start and end positions of transcription tags."
   (save-excursion
     (goto-char (point-max))
-    (when (re-search-backward (regexp-quote whisper-live-start-tag) nil t)
+    (when
+        (re-search-backward (regexp-quote whisper-live-start-tag) nil
+                            t)
       (let ((start-pos (match-beginning 0)))
-        (when (re-search-forward (regexp-quote whisper-live-end-tag) nil t)
+        (when
+            (re-search-forward (regexp-quote whisper-live-end-tag) nil
+                               t)
           (cons start-pos (match-end 0)))))))
 
 (defun whisper--live-remove-tags (text)
@@ -83,32 +92,46 @@
                                (regexp-quote whisper-live-end-tag))
                        "" text)))
       (if whisper-live-clean-with-llm
-          (format "%s%s%s" whisper-live-start-tag clean-text whisper-live-end-tag)
+          (format "%s%s%s" whisper-live-start-tag clean-text
+                  whisper-live-end-tag)
         clean-text))))
 
-(defun whisper-live--clean-raw-transcription-with-llm (raw-transcription)
+(defun whisper-live--clean-raw-transcription-with-llm
+    (raw-transcription)
   "Clean RAW-TRANSCRIPTION using LLM."
   (when (and whisper-live-anthropic-key
              (not (string-empty-p whisper-live-anthropic-key)))
     (if (string-empty-p raw-transcription)
         raw-transcription
       (condition-case err
-          (let* ((full-prompt (concat whisper-live-llm-prompt raw-transcription))
-                 (response (request
-                             "https://api.anthropic.com/v1/messages"
-                             :type "POST"
-                             :headers `(("content-type" . "application/json")
-                                        ("x-api-key" . ,whisper-live-anthropic-key)
-                                        ("anthropic-version" . "2023-06-01"))
-                             :data (json-encode
-                                    `(("model" . ,whisper-live-anthropic-engine)
-                                      ("max_tokens" . 2048)
-                                      ("messages" . [,(list (cons "role" "user")
-                                                            (cons "content" full-prompt))])))
-                             :parser 'json-read
-                             :sync t
-                             :silent t))
-                 (resp-data (request-response-data response)))
+          (let*
+              ((full-prompt
+                (concat whisper-live-llm-prompt raw-transcription))
+               (response (request
+                           "https://api.anthropic.com/v1/messages"
+                           :type
+                           "POST"
+                           :headers `
+                           (("content-type" . "application/json")
+                            ("x-api-key"
+                             . ,whisper-live-anthropic-key)
+                            ("anthropic-version"
+                             . "2023-06-01"))
+                           :data (json-encode
+                                  `
+                                  (("model"
+                                    . ,whisper-live-anthropic-engine)
+                                   ("max_tokens" . 2048)
+                                   ("messages" . [,(list
+                                                    (cons "role"
+                                                          "user")
+                                                    (cons
+                                                     "content"
+                                                     full-prompt))])))
+                           :parser 'json-read
+                           :sync t
+                           :silent t))
+               (resp-data (request-response-data response)))
             (when resp-data
               (alist-get 'text (aref (alist-get 'content resp-data) 0))))
         (error
@@ -118,19 +141,27 @@
   "Hook run after transcription to clean with LLM if enabled."
   (when (and whisper-live-clean-with-llm
              whisper-live--transcription-text)
-    (let ((cleaned-text (whisper-live--clean-raw-transcription-with-llm
-                         whisper-live--transcription-text)))
+    (let ((cleaned-text
+           (whisper-live--clean-raw-transcription-with-llm
+            whisper-live--transcription-text)))
       (when cleaned-text
-        (with-current-buffer (marker-buffer whisper-live--insert-marker)
+        (with-current-buffer
+            (marker-buffer whisper-live--insert-marker)
           (save-excursion
             (goto-char whisper-live--insert-marker)
-            (delete-region whisper-live--insert-marker whisper-live--insert-end-marker)
+            (delete-region whisper-live--insert-marker
+                           whisper-live--insert-end-marker)
             (insert cleaned-text)
             (set-marker whisper-live--insert-end-marker (point))))))))
 
-(add-hook 'whisper-live-transcribe-hook #'whisper-live--llm-post-transcribe-hook)
+(add-hook 'whisper-live-transcribe-hook
+          #'whisper-live--llm-post-transcribe-hook)
+
 
 (provide 'whisper-live-llm)
 
-
-(message "%s was loaded." (file-name-nondirectory (or load-file-name buffer-file-name)))
+(when
+    (not load-file-name)
+  (message "whisper-live-llm.el loaded."
+           (file-name-nondirectory
+            (or load-file-name buffer-file-name))))
