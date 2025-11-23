@@ -163,6 +163,81 @@
     (should (= whisper-live--chunk-id 0))
     (should (null whisper-live--chunks))))
 
+;;; Auto-stop Feature Tests
+
+(ert-deftest test-whisper-live-auto-stop-config ()
+  "Test auto-stop configuration variables."
+  (should (booleanp whisper-live-auto-stop-on-idle))
+  (should (numberp whisper-live-idle-timeout))
+  (should (> whisper-live-idle-timeout 0))
+  (should (numberp whisper-live-silence-timeout))
+  (should (> whisper-live-silence-timeout 0))
+  (should (or (null whisper-live-max-session-duration)
+              (and (numberp whisper-live-max-session-duration)
+                   (> whisper-live-max-session-duration 0)))))
+
+(ert-deftest test-whisper-live-auto-stop-timer-vars ()
+  "Test auto-stop timer variables initialize correctly."
+  (should (or (null whisper-live--idle-timer)
+              (timerp whisper-live--idle-timer)))
+  (should (or (null whisper-live--silence-timer)
+              (timerp whisper-live--silence-timer)))
+  (should (or (null whisper-live--session-timer)
+              (timerp whisper-live--session-timer))))
+
+(ert-deftest test-whisper-live-cancel-auto-stop-timers ()
+  "Test canceling auto-stop timers."
+  (should (fboundp 'whisper-live--cancel-auto-stop-timers))
+  ;; Function should not error when timers are nil
+  (let ((whisper-live--idle-timer nil)
+        (whisper-live--silence-timer nil)
+        (whisper-live--session-timer nil))
+    (whisper-live--cancel-auto-stop-timers)
+    (should (null whisper-live--idle-timer))
+    (should (null whisper-live--silence-timer))
+    (should (null whisper-live--session-timer))))
+
+(ert-deftest test-whisper-live-update-activity-time ()
+  "Test activity time update function."
+  (should (fboundp 'whisper-live--update-activity-time))
+  (let ((before-time (current-time)))
+    (sit-for 0.1)
+    (whisper-live--update-activity-time)
+    (should (time-less-p before-time whisper-live--last-activity-time))))
+
+;;; Language Switcher Tests
+
+(ert-deftest test-whisper-live-languages-list ()
+  "Test languages list configuration."
+  (should (listp whisper-live-languages))
+  (should (> (length whisper-live-languages) 0))
+  (should (member "en" whisper-live-languages))
+  (should (member "ja" whisper-live-languages)))
+
+(ert-deftest test-whisper-live-switch-language-function ()
+  "Test language switcher function exists and is callable."
+  (should (fboundp 'whisper-live-switch-language))
+  (should (commandp 'whisper-live-switch-language)))
+
+(ert-deftest test-whisper-live-switch-language-cycles ()
+  "Test language switcher cycles through languages."
+  (let ((whisper-language "en")
+        (whisper-live-languages '("en" "ja")))
+    ;; Switch from en to ja
+    (should (string= (whisper-live-switch-language) "ja"))
+    (should (string= whisper-language "ja"))
+    ;; Switch from ja back to en
+    (should (string= (whisper-live-switch-language) "en"))
+    (should (string= whisper-language "en"))))
+
+(ert-deftest test-whisper-live-switch-language-unknown ()
+  "Test language switcher handles unknown current language."
+  (let ((whisper-language "unknown")
+        (whisper-live-languages '("en" "ja")))
+    ;; Should default to first language when current is unknown
+    (should (string= (whisper-live-switch-language) "en"))
+    (should (string= whisper-language "en"))))
+
 (provide 'test-whisper-live-core)
 
 (when (not load-file-name)
