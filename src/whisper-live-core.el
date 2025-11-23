@@ -54,6 +54,12 @@ Reduced to 6 (~30 seconds of audio) to prevent whisper timeout on long audio fil
 (defvar whisper-live--sentence-counter 0
   "Counter for numbering transcribed sentences.")
 
+(defvar whisper-live--chunk-id 0
+  "Incrementing ID for each transcription chunk.")
+
+(defvar whisper-live--chunks nil
+  "List of chunks as plists: (:id N :text \"...\" :raw \"...\" :time TIME).")
+
 (defvar whisper-live--last-transcription-time nil
   "Time when last transcription started.")
 
@@ -80,7 +86,9 @@ If CANCELING is non-nil, set canceling flag to prevent insertions."
         whisper-live--current-transcription nil
         whisper-live--transcription-text nil
         whisper-live--last-sent-length 0
-        whisper-live--sentence-counter 0)
+        whisper-live--sentence-counter 0
+        whisper-live--chunk-id 0
+        whisper-live--chunks nil)
   (whisper-live--cleanup-markers)
   ;; Reset canceling flag after a short delay
   (when canceling
@@ -126,6 +134,8 @@ If CANCELING is non-nil, set canceling flag to prevent insertions."
           whisper-live--transcription-text nil
           whisper-live--last-sent-length 0
           whisper-live--sentence-counter 0
+          whisper-live--chunk-id 0
+          whisper-live--chunks nil
           whisper-live--canceling nil
           whisper-live--insert-marker (point-marker)
           whisper-live--insert-end-marker (point-marker))
