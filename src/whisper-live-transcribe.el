@@ -29,20 +29,55 @@
 (defun whisper-live--clean-transcript (text)
   "Clean transcript TEXT by removing noise and brackets."
   (when text
-    (let
-        ((cleaned
-          (replace-regexp-in-string "\\[.*?\\]\\|([^)]*)" "" text)))
+    (let ((cleaned text))
+      ;; Remove whisper progress messages
       (setq cleaned
             (replace-regexp-in-string
              "whisper_print_progress_callback: progress = +[0-9]+%" ""
+             cleaned))
+      ;; Remove [BLANK_AUDIO] and similar markers (but keep Japanese brackets like 「」)
+      (setq cleaned
+            (replace-regexp-in-string
+             "\\[BLANK_AUDIO\\]\\|\\[_BEG_\\]\\|\\[_TT_[0-9]+\\]" ""
+             cleaned))
+      ;; Remove whisper system messages
+      (setq cleaned
+            (replace-regexp-in-string
+             "^whisper_.*$" ""
+             cleaned))
+      ;; Remove parenthetical noise markers like (background noise)
+      (setq cleaned
+            (replace-regexp-in-string
+             "([^)]*noise[^)]*)" ""
              cleaned))
       (string-trim cleaned))))
 
 (defun whisper-live--extract-text-from-output (buffer)
   "Extract transcribed text from whisper output BUFFER."
   (with-current-buffer buffer
-    (when (string-match "\n\n \\(.*\\)\n\n" (buffer-string))
-      (match-string 1 (buffer-string)))))
+    (let ((output (buffer-string)))
+      ;; Try multiple patterns to extract text
+      (cond
+       ;; Pattern 1: Standard "\n\n TEXT\n\n" format
+       ((string-match "\n\n[ \t]*\\(.+\\)[ \t]*\n\n" output)
+        (match-string 1 output))
+       ;; Pattern 2: Text after all model loading messages (more flexible)
+       ((string-match "whisper_model_load:.*\n+\\(.+\\)" output)
+        (let ((text (match-string 1 output)))
+          ;; Clean up: take everything until next whisper_ line or end
+          (when (string-match "\\(.*?\\)\\(?:\nwhisper_\\|$\\)" text)
+            (string-trim (match-string 1 text)))))
+       ;; Pattern 3: Any text after the model info, before process ends
+       ((string-match "whisper_full_.*\n+\\([^\n]+\\)" output)
+        (match-string 1 output))
+       ;; Pattern 4: Last substantial line that's not a whisper_ message
+       (t
+        (let ((lines (split-string output "\n" t)))
+          (cl-loop for line in (reverse lines)
+                   when (and (not (string-match-p "^whisper_" line))
+                             (not (string-match-p "^main:" line))
+                             (> (length (string-trim line)) 0))
+                   return (string-trim line))))))))
 
 (defun whisper-live--insert-chunk-vterm (chunk-id clean-text)
   "Insert CLEAN-TEXT into vterm buffer with CHUNK-ID."
