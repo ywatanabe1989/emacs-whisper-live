@@ -335,6 +335,10 @@ Use 'auto' for automatic language detection which works better for
 non-English languages like Japanese.
 Can also use ISO 639-1 codes like 'ja', 'zh', 'es', etc.")
 
+(defvar whisper-live-default-language "auto"
+  "Default language for whisper-live transcription.
+Set to 'auto' for automatic language detection.")
+
 (defun whisper-live-switch-language ()
   "Cycle through configured languages for whisper transcription.
 Cycles through languages in `whisper-live-languages' list."
@@ -364,6 +368,11 @@ This may cause empty transcriptions. Use generic model (without .en) instead."
 (defun whisper-live--init ()
   "Initialize whisper-live settings and directories."
   (whisper-live--generate-chunks-directory)
+  ;; Ensure language is valid for whisper-live
+  (when (and (not (member whisper-language whisper-live-languages))
+             (not (string-equal whisper-language "auto")))
+    (setq whisper-language whisper-live-default-language)
+    (message "[whisper-live] Language changed to: %s" whisper-language))
   (when (not whisper-live--initialized)
     ;; Initialize paths
     (setq whisper--install-path (expand-file-name
