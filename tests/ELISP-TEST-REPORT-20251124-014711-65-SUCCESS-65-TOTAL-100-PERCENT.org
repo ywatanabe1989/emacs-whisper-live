@@ -1,0 +1,88 @@
+#+TITLE: Elisp Test Report
+#+AUTHOR: ywatanabe
+#+DATE: 2025-11-24 01:47:22 Created by https://github.com/ywatanabe1989/emacs-test
+
+* Test Results Summary
+
+- Passed: 65
+- Failed: 0
+- Skipped: 0
+- Timeout (= 10 s): 0
+- Duplicates: 0
+- Total: 65
+- Total Time: 11.27 seconds
+- Success Rate: 100.0%
+
+* Passed Tests (65)
+** test-whisper-live-audio.el (7 tests)
+- [[file:test-whisper-live-audio.el::test-whisper-live-generate-chunks-directory][test-whisper-live-generate-chunks-directory]]
+- [[file:test-whisper-live-audio.el::test-whisper-live-update-chunks-directory][test-whisper-live-update-chunks-directory]]
+- [[file:test-whisper-live-audio.el::test-whisper-live-ensure-directory][test-whisper-live-ensure-directory]]
+- [[file:test-whisper-live-audio.el::test-whisper-live-generate-chunk-filename][test-whisper-live-generate-chunk-filename]]
+- [[file:test-whisper-live-audio.el::test-whisper-live-context-chunks][test-whisper-live-context-chunks]]
+- [[file:test-whisper-live-audio.el::test-whisper-live-concatenate-chunks-no-files][test-whisper-live-concatenate-chunks-no-files]]
+- [[file:test-whisper-live-audio.el::test-whisper-live-concatenate-chunks-with-files][test-whisper-live-concatenate-chunks-with-files]]
+** test-whisper-live-core.el (13 tests)
+- [[file:test-whisper-live-core.el::test-whisper-live-chunk-duration-default][test-whisper-live-chunk-duration-default]]
+- [[file:test-whisper-live-core.el::test-whisper-live-max-chunks-default][test-whisper-live-max-chunks-default]]
+- [[file:test-whisper-live-core.el::test-whisper-live-mode-line-indicator][test-whisper-live-mode-line-indicator]]
+- [[file:test-whisper-live-core.el::test-whisper-live-audio-feedback-boolean][test-whisper-live-audio-feedback-boolean]]
+- [[file:test-whisper-live-core.el::test-whisper-live-buzzer-frequency][test-whisper-live-buzzer-frequency]]
+- [[file:test-whisper-live-core.el::test-whisper-live-buzzer-volume][test-whisper-live-buzzer-volume]]
+- [[file:test-whisper-live-core.el::test-whisper-live-number-chunks-boolean][test-whisper-live-number-chunks-boolean]]
+- [[file:test-whisper-live-core.el::test-whisper-live-chunk-format][test-whisper-live-chunk-format]]
+- [[file:test-whisper-live-core.el::test-whisper-live-cleanup-markers][test-whisper-live-cleanup-markers]]
+- [[file:test-whisper-live-core.el::test-whisper-live-cleanup][test-whisper-live-cleanup]]
+- [[file:test-whisper-live-core.el::test-whisper-live-init][test-whisper-live-init]]
+- [[file:test-whisper-live-core.el::test-whisper-live-switch-model][test-whisper-live-switch-model]]
+- [[file:test-whisper-live-core.el::test-whisper-live-switch-model-function-exists][test-whisper-live-switch-model-function-exists]]
+** test-whisper-live-integration.el (7 tests)
+- [[file:test-whisper-live-integration.el::test-whisper-live-integration-transcribe-jfk][test-whisper-live-integration-transcribe-jfk]]
+- [[file:test-whisper-live-integration.el::test-whisper-live-integration-transcribe-custom-audio][test-whisper-live-integration-transcribe-custom-audio]]
+- [[file:test-whisper-live-integration.el::test-whisper-live-integration-command-generation][test-whisper-live-integration-command-generation]]
+- [[file:test-whisper-live-integration.el::test-whisper-live-integration-audio-pipeline][test-whisper-live-integration-audio-pipeline]]
+- [[file:test-whisper-live-integration.el::test-whisper-live-integration-transcription-queue][test-whisper-live-integration-transcription-queue]]
+- [[file:test-whisper-live-integration.el::test-whisper-live-integration-openblas-performance][test-whisper-live-integration-openblas-performance]]
+- [[file:test-whisper-live-integration.el::test-whisper-live-integration-delta-with-actual-transcription][test-whisper-live-integration-delta-with-actual-transcription]]
+** test-whisper-live-loadable.el (7 tests)
+- [[file:test-whisper-live-loadable.el::test-whisper-live-core-loadable][test-whisper-live-core-loadable]]
+- [[file:test-whisper-live-loadable.el::test-whisper-live-audio-loadable][test-whisper-live-audio-loadable]]
+- [[file:test-whisper-live-loadable.el::test-whisper-live-transcribe-loadable][test-whisper-live-transcribe-loadable]]
+- [[file:test-whisper-live-loadable.el::test-whisper-live-vterm-loadable][test-whisper-live-vterm-loadable]]
+- [[file:test-whisper-live-loadable.el::test-whisper-live-llm-loadable][test-whisper-live-llm-loadable]]
+- [[file:test-whisper-live-loadable.el::test-whisper-live-run-loadable][test-whisper-live-run-loadable]]
+- [[file:test-whisper-live-loadable.el::test-whisper-live-loadable][test-whisper-live-loadable]]
+** test-whisper-live-setup.el (10 tests)
+- [[file:test-whisper-live-setup.el::test-whisper-install-directory-exists][test-whisper-install-directory-exists]]
+- [[file:test-whisper-live-setup.el::test-whisper-binary-exists][test-whisper-binary-exists]]
+- [[file:test-whisper-live-setup.el::test-whisper-binary-executable][test-whisper-binary-executable]]
+- [[file:test-whisper-live-setup.el::test-whisper-models-directory-exists][test-whisper-models-directory-exists]]
+- [[file:test-whisper-live-setup.el::test-whisper-at-least-one-model][test-whisper-at-least-one-model]]
+- [[file:test-whisper-live-setup.el::test-whisper-openblas-linked][test-whisper-openblas-linked]]
+- [[file:test-whisper-live-setup.el::test-ffmpeg-available][test-ffmpeg-available]]
+- [[file:test-whisper-live-setup.el::test-ffplay-available][test-ffplay-available]]
+- [[file:test-whisper-live-setup.el::test-temporary-directory-writable][test-temporary-directory-writable]]
+- [[file:test-whisper-live-setup.el::test-chunks-directory-creation][test-chunks-directory-creation]]
+** test-whisper-live-transcribe.el (14 tests)
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-delta-overlap-words][test-whisper-live-delta-overlap-words]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-min-delta-chars][test-whisper-live-min-delta-chars]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-normalize-for-delta][test-whisper-live-normalize-for-delta]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-last-n-words][test-whisper-live-last-n-words]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-compute-delta-empty-prev][test-whisper-live-compute-delta-empty-prev]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-compute-delta-no-change][test-whisper-live-compute-delta-no-change]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-compute-delta-addition][test-whisper-live-compute-delta-addition]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-compute-delta-punctuation-change][test-whisper-live-compute-delta-punctuation-change]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-compute-delta-shorter-current][test-whisper-live-compute-delta-shorter-current]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-clean-transcript][test-whisper-live-clean-transcript]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-command-without-prompt][test-whisper-live-command-without-prompt]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-command-with-prompt][test-whisper-live-command-with-prompt]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-transcription-queue-init][test-whisper-live-transcription-queue-init]]
+- [[file:test-whisper-live-transcribe.el::test-whisper-live-current-transcription-init][test-whisper-live-current-transcription-init]]
+** test-whisper-live.el (7 tests)
+- [[file:test-whisper-live.el::test-whisper-live-installation][test-whisper-live-installation]]
+- [[file:test-whisper-live.el::test-whisper-live-binary-exists][test-whisper-live-binary-exists]]
+- [[file:test-whisper-live.el::test-whisper-live-openblas-linked][test-whisper-live-openblas-linked]]
+- [[file:test-whisper-live.el::test-whisper-live-models-exist][test-whisper-live-models-exist]]
+- [[file:test-whisper-live.el::test-whisper-live-whisper-transcription][test-whisper-live-whisper-transcription]]
+- [[file:test-whisper-live.el::test-whisper-live-openblas-performance][test-whisper-live-openblas-performance]]
+- [[file:test-whisper-live.el::test-whisper-live-full-workflow][test-whisper-live-full-workflow]]

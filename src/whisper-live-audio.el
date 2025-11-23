@@ -1,9 +1,9 @@
 ;;; -*- coding: utf-8; lexical-binding: t -*-
 ;;; Author: ywatanabe
-;;; Timestamp: <2025-07-04 08:52:45>
+;;; Timestamp: <2025-11-24 05:51:37>
 ;;; File: /home/ywatanabe/.emacs.d/lisp/whisper-live/src/whisper-live-audio.el
 
-;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@alumni.u-tokyo.ac.jp)
+;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@scitex.ai)
 
 
 ;;; Time-stamp: <2024-12-08 18:06:39 (ywatanabe)>
