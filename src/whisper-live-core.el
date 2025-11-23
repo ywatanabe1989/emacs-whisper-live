@@ -328,9 +328,12 @@ This is called periodically to check silence duration."
 
 ;; Language switcher
 
-(defvar whisper-live-languages '("en" "ja")
+(defvar whisper-live-languages '("en" "auto")
   "List of languages to cycle through.
-Default is English (en) and Japanese (ja).")
+Default is English (en) and auto-detect (auto).
+Use 'auto' for automatic language detection which works better for
+non-English languages like Japanese.
+Can also use ISO 639-1 codes like 'ja', 'zh', 'es', etc.")
 
 (defun whisper-live-switch-language ()
   "Cycle through configured languages for whisper transcription.
@@ -345,6 +348,7 @@ Cycles through languages in `whisper-live-languages' list."
     (setq whisper-language next-lang)
     ;; Warn if using .en model with non-English language
     (when (and (not (string-equal next-lang "en"))
+               (not (string-equal next-lang "auto"))
                (string-suffix-p ".en" whisper-model))
       (warn "[whisper-live] WARNING: Using .en model (%s) with %s language. \
 This may cause empty transcriptions. Use generic model (without .en) instead."

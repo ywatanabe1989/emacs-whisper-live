@@ -212,7 +212,7 @@
   (should (listp whisper-live-languages))
   (should (> (length whisper-live-languages) 0))
   (should (member "en" whisper-live-languages))
-  (should (member "ja" whisper-live-languages)))
+  (should (member "auto" whisper-live-languages)))
 
 (ert-deftest test-whisper-live-switch-language-function ()
   "Test language switcher function exists and is callable."
@@ -222,18 +222,18 @@
 (ert-deftest test-whisper-live-switch-language-cycles ()
   "Test language switcher cycles through languages."
   (let ((whisper-language "en")
-        (whisper-live-languages '("en" "ja")))
-    ;; Switch from en to ja
-    (should (string= (whisper-live-switch-language) "ja"))
-    (should (string= whisper-language "ja"))
-    ;; Switch from ja back to en
+        (whisper-live-languages '("en" "auto")))
+    ;; Switch from en to auto
+    (should (string= (whisper-live-switch-language) "auto"))
+    (should (string= whisper-language "auto"))
+    ;; Switch from auto back to en
     (should (string= (whisper-live-switch-language) "en"))
     (should (string= whisper-language "en"))))
 
 (ert-deftest test-whisper-live-switch-language-unknown ()
   "Test language switcher handles unknown current language."
   (let ((whisper-language "unknown")
-        (whisper-live-languages '("en" "ja")))
+        (whisper-live-languages '("en" "auto")))
     ;; Should default to first language when current is unknown
     (should (string= (whisper-live-switch-language) "en"))
     (should (string= whisper-language "en"))))
