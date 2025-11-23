@@ -221,16 +221,27 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
                                (setq
                                 whisper-live--transcription-duration
                                 duration)
-                               ;; Debug: show raw output when text is empty
+                               ;; Debug: show raw output when text is empty OR for Japanese
                                (when
                                    (or (not text)
                                        (string-empty-p
-                                        (string-trim text)))
+                                        (string-trim text))
+                                       (string-equal whisper-language "auto")
+                                       (string-equal whisper-language "ja"))
                                  (message
-                                  "[whisper-live] DEBUG - Empty text! Raw output:\n%s"
+                                  "[whisper-live] DEBUG - Raw output (lang=%s):\n%s"
+                                  whisper-language
                                   (substring raw-output 0
-                                             (min 500
+                                             (min 1000
                                                   (length raw-output)))))
+                               ;; Save full raw output to file if debug enabled
+                               (when whisper-live-debug-output
+                                 (let ((debug-file
+                                        (format "/tmp/whisper-live-debug-%s.txt"
+                                                (format-time-string "%Y%m%d-%H%M%S"))))
+                                   (with-temp-file debug-file
+                                     (insert raw-output))
+                                   (message "[whisper-live] Debug output saved to: %s" debug-file)))
                                ;; Show info in messages
                                (message
                                 "[whisper-live] Transcription #%d took %.2fs: %s"

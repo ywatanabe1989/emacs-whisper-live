@@ -339,6 +339,10 @@ Can also use ISO 639-1 codes like 'ja', 'zh', 'es', etc.")
   "Default language for whisper-live transcription.
 Set to 'auto' for automatic language detection.")
 
+(defvar whisper-live-debug-output nil
+  "Enable debug output for transcription.
+When t, saves raw whisper output to /tmp/whisper-live-debug-*.txt files.")
+
 (defun whisper-live-switch-language ()
   "Cycle through configured languages for whisper transcription.
 Cycles through languages in `whisper-live-languages' list."
