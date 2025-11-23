@@ -24,8 +24,8 @@
         (message "[whisper-live] Stopping, beep-on-stop=%s"
                  whisper-live-beep-on-stop)
         (when whisper-live-beep-on-stop
-          (whisper-live--beep whisper-live-beep-stop-frequency 300 3)
-          (message "[whisper-live] Stop beep (3x low tone)!"))
+          (whisper-live--beep whisper-live-beep-stop-frequency 300 1)
+          (message "[whisper-live] Stop beep (1x low tone)!"))
         (message "Stopped"))
     ;; Always cleanup any existing processes before starting
     (when (or whisper-live--current-process
