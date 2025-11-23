@@ -1,9 +1,9 @@
 ;;; -*- coding: utf-8; lexical-binding: t -*-
 ;;; Author: ywatanabe
-;;; Timestamp: <2025-07-04 09:03:50>
+;;; Timestamp: <2025-11-24 05:51:38>
 ;;; File: /home/ywatanabe/.emacs.d/lisp/whisper-live/src/whisper-live-core.el
 
-;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@alumni.u-tokyo.ac.jp)
+;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@scitex.ai)
 
 
 (require 'whisper)
@@ -11,10 +11,14 @@
 (defvar whisper-live--transcription-text ""
   "Current transcription text.")
 
-(defcustom whisper-live-chunk-duration 5
-  "Duration of each audio chunk in seconds."
-  :type 'integer
-  :group 'whisper)
+(defvar whisper-live-chunk-duration 5
+  "Duration of each audio chunk in seconds.")
+
+(defvar whisper-live-beep-on-start t
+  "Beep when recording starts.")
+
+(defvar whisper-live-beep-on-chunk t
+  "Beep when each chunk is recorded.")
 
 (defvar whisper-live--current-process nil
   "Current recording process.")
@@ -31,10 +35,9 @@
 (defvar whisper-live--insert-end-marker nil
   "Marker for end of insertion position.")
 
-(defcustom whisper-live--max-chunks 30
-  "Maximum number of transcription chunks to keep in history."
-  :type 'integer
-  :group 'whisper)
+(defvar whisper-live--max-chunks 6
+  "Maximum number of transcription chunks to keep in history.
+Reduced to 6 (~30 seconds of audio) to prevent whisper timeout on long audio files.")
 
 (defvar whisper-live-transcribe-hook nil
   "Hook run after each transcription.")
@@ -45,27 +48,44 @@
 (defvar whisper-live--current-transcription nil
   "Currently running transcription process.")
 
+(defvar whisper-live--last-sent-length 0
+  "Length of last text sent to terminal for backspacing.")
+
+(defvar whisper-live--sentence-counter 0
+  "Counter for numbering transcribed sentences.")
+
+(defvar whisper-live--last-transcription-time nil
+  "Time when last transcription started.")
+
+(defvar whisper-live--transcription-duration 0
+  "Duration of last transcription in seconds.")
+
+(defvar whisper-live--canceling nil
+  "Flag to indicate transcription is being canceled.")
+
 ;; Core functions
 
-(defun whisper-live--cleanup ()
-  "Clean up resources used by whisper-live."
+(defun whisper-live--cleanup (&optional canceling)
+  "Clean up resources used by whisper-live.
+If CANCELING is non-nil, set canceling flag to prevent insertions."
+  (when canceling
+    (setq whisper-live--canceling t))
   (when whisper-live--current-process
     (delete-process whisper-live--current-process))
+  (when whisper-live--current-transcription
+    (delete-process whisper-live--current-transcription))
   (when whisper-live--transcription-queue
     (setq whisper-live--transcription-queue nil))
   (setq whisper-live--current-process nil
         whisper-live--current-transcription nil
-        whisper-live--transcription-text nil)
-  (whisper-live--cleanup-markers))
-
-;; (defun whisper-live--cleanup-markers ()
-;;   "Clean up markers."
-;;   (when whisper-live--insert-marker
-;;     (set-marker whisper-live--insert-marker nil))
-;;   (when whisper-live--insert-end-marker
-;;     (set-marker whisper-live--insert-end-marker nil))
-;;   (setq whisper-live--insert-marker nil
-;;         whisper-live--insert-end-marker nil))
+        whisper-live--transcription-text nil
+        whisper-live--last-sent-length 0
+        whisper-live--sentence-counter 0)
+  (whisper-live--cleanup-markers)
+  ;; Reset canceling flag after a short delay
+  (when canceling
+    (run-with-timer 0.1 nil
+                    (lambda () (setq whisper-live--canceling nil)))))
 
 (defun whisper-live--cleanup-markers ()
   "Clean up markers."
@@ -104,6 +124,9 @@
           whisper-live--transcription-queue nil
           whisper-live--current-transcription nil
           whisper-live--transcription-text nil
+          whisper-live--last-sent-length 0
+          whisper-live--sentence-counter 0
+          whisper-live--canceling nil
           whisper-live--insert-marker (point-marker)
           whisper-live--insert-end-marker (point-marker))
 
@@ -118,7 +141,12 @@
 
     (setq whisper-live--initialized t)))
 
-(add-hook 'keyboard-quit-hook #'whisper-live--cleanup)
+(defun whisper-live--cleanup-on-quit ()
+  "Cleanup when user cancels with C-g."
+  (when whisper-live--current-process
+    (whisper-live--cleanup t)))
+
+(add-hook 'keyboard-quit-hook #'whisper-live--cleanup-on-quit)
 
 
 (provide 'whisper-live-core)

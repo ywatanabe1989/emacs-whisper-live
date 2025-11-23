@@ -1,9 +1,9 @@
 ;;; -*- coding: utf-8; lexical-binding: t -*-
 ;;; Author: ywatanabe
-;;; Timestamp: <2025-07-04 08:52:56>
+;;; Timestamp: <2025-11-24 05:51:38>
 ;;; File: /home/ywatanabe/.emacs.d/lisp/whisper-live/src/whisper-live-llm.el
 
-;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@alumni.u-tokyo.ac.jp)
+;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@scitex.ai)
 
 
 ;;; Time-stamp: <2024-12-08 19:17:19 (ywatanabe)>
@@ -11,36 +11,25 @@
 (require 'request)
 (require 'whisper-live-core)
 
-(defcustom whisper-live-anthropic-key
+(defvar whisper-live-anthropic-key
   (or (getenv "ANTHROPIC_API_KEY") "")
-  "API key for Anthropic Claude. Defaults to ANTHROPIC_API_KEY environment variable."
-  :type 'string
-  :group 'whisper-live)
+  "API key for Anthropic Claude. Defaults to ANTHROPIC_API_KEY environment variable.")
 
-(defcustom whisper-live-anthropic-engine (getenv "ANTHROPIC_ENGINE")
-  "Model engine for Anthropic Claude."
-  :type 'string
-  :group 'whisper-live)
+(defvar whisper-live-anthropic-engine (getenv "ANTHROPIC_ENGINE")
+  "Model engine for Anthropic Claude.")
 
-(defcustom whisper-live-clean-with-llm nil
-  "Whether to clean transcriptions using LLM (AI language model)."
-  :type 'boolean
-  :group 'whisper-live
-  :safe #'booleanp)
+(defvar whisper-live-clean-with-llm nil
+  "Whether to clean transcriptions using LLM (AI language model).")
 
 (defvar whisper-live-llm-prompt
   "Clean up the following raw text transcribed from audio. Fix minor errors to produce natural language output. As long as meaning is remained, you can revise as a English native speaker. Respond with only the corrected text and NEVER INCLUDE YOUR COMMENTS. Now, the raw transcription is as follows: \n"
   "Prompt text used for LLM-based transcription cleanup.")
 
-(defcustom whisper-live-start-tag-base "Whisper"
-  "Tag to prepend at start of transcription."
-  :type 'string
-  :group 'whisper-live)
+(defvar whisper-live-start-tag-base "Whisper"
+  "Tag to prepend at start of transcription.")
 
-(defcustom whisper-live-end-tag-base "Whisper"
-  "Tag to append at end of transcription."
-  :type 'string
-  :group 'whisper-live)
+(defvar whisper-live-end-tag-base "Whisper"
+  "Tag to append at end of transcription.")
 
 (defvar whisper-live-start-tag nil
   "Tag to prepend at start of transcription.")

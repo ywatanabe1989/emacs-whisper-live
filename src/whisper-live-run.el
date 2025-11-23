@@ -1,9 +1,9 @@
 ;;; -*- coding: utf-8; lexical-binding: t -*-
 ;;; Author: ywatanabe
-;;; Timestamp: <2025-07-04 08:52:59>
+;;; Timestamp: <2025-11-24 05:51:39>
 ;;; File: /home/ywatanabe/.emacs.d/lisp/whisper-live/src/whisper-live-run.el
 
-;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@alumni.u-tokyo.ac.jp)
+;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@scitex.ai)
 
 
 ;;; Time-stamp: <2024-12-08 19:20:40 (ywatanabe)>
@@ -14,13 +14,24 @@
 (require 'whisper-live-llm)
 
 ;;;###autoload
+
 (defun whisper-live-run ()
   "Toggle live transcription."
   (interactive)
   (if whisper-live--current-process
       (progn
         (whisper-live--cleanup)
+        (message "[whisper-live] Stopping, beep-on-start=%s"
+                 whisper-live-beep-on-start)
+        (when whisper-live-beep-on-start
+          (beep)
+          (message "[whisper-live] Beep on stop!"))
         (message "Stopped"))
+    ;; Always cleanup any existing processes before starting
+    (when (or whisper-live--current-process
+              whisper-live--current-transcription
+              whisper-live--transcription-queue)
+      (whisper-live--cleanup))
     (whisper-live--init)
     (whisper-live--update-chunks-directory)
     (whisper-live--ensure-directory)
@@ -30,6 +41,11 @@
           whisper-live--insert-end-marker (point-marker))
     (set-marker whisper-live--insert-end-marker (point))
     (whisper-live--record-chunk)
+    (message "[whisper-live] Starting, beep-on-start=%s"
+             whisper-live-beep-on-start)
+    (when whisper-live-beep-on-start
+      (beep)
+      (message "[whisper-live] Beep on start!"))
     (message "Live transcription started")))
 
 

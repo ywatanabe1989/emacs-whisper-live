@@ -1,3 +1,11 @@
+;;; -*- coding: utf-8; lexical-binding: t -*-
+;;; Author: ywatanabe
+;;; Timestamp: <2025-11-24 05:51:36>
+;;; File: /home/ywatanabe/.emacs.d/lisp/whisper-live/src/whisper.el
+
+;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@scitex.ai)
+
+
 ;;; whisper.el --- Speech-to-Text interface using OpenAI's whisper model -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2022 Imran Khan.
@@ -745,4 +753,11 @@ This is a dwim function that does different things depending on current state:
 
 ;;; whisper.el ends here
 
+
 (provide 'whisper)
+
+(when
+    (not load-file-name)
+  (message "whisper.el loaded."
+           (file-name-nondirectory
+            (or load-file-name buffer-file-name))))
