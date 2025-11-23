@@ -44,56 +44,45 @@
     (when (string-match "\n\n \\(.*\\)\n\n" (buffer-string))
       (match-string 1 (buffer-string)))))
 
-(defun whisper-live--insert-into-vterm (clean-text)
-  "Insert CLEAN-TEXT into vterm buffer as numbered line."
+(defun whisper-live--insert-chunk-vterm (chunk-id clean-text)
+  "Insert CLEAN-TEXT into vterm buffer with CHUNK-ID."
   (when-let ((proc (get-buffer-process (current-buffer))))
-    ;; Only proceed if we have meaningful text (not empty, not just whitespace/punctuation)
+    ;; Only proceed if we have meaningful text
     (when (and (not (string-empty-p clean-text))
                (not (string-empty-p (string-trim clean-text)))
                (not (string-match-p "^[[:space:].,!?;:]*$" clean-text)))
-      ;; Increment counter
-      (setq whisper-live--sentence-counter
-            (1+ whisper-live--sentence-counter))
-      ;; Send numbered text with newline
+      ;; Send numbered text with [001] format
       (vterm-send-string
-       (format "%d. %s\n" whisper-live--sentence-counter clean-text)))))
+       (format "[%03d] %s\n" chunk-id clean-text)))))
 
-(defun whisper-live--insert-into-term (clean-text)
-  "Insert CLEAN-TEXT into term buffer as numbered line."
-  ;; Only proceed if we have meaningful text (not empty, not just whitespace/punctuation)
+(defun whisper-live--insert-chunk-term (chunk-id clean-text)
+  "Insert CLEAN-TEXT into term buffer with CHUNK-ID."
+  ;; Only proceed if we have meaningful text
   (when (and (not (string-empty-p clean-text))
              (not (string-empty-p (string-trim clean-text)))
              (not (string-match-p "^[[:space:].,!?;:]*$" clean-text)))
-    ;; Increment counter
-    (setq whisper-live--sentence-counter
-          (1+ whisper-live--sentence-counter))
-    ;; Send numbered text with newline
+    ;; Send numbered text with [001] format
     (term-send-string (get-buffer-process (current-buffer))
-                      (format "%d. %s\n"
-                              whisper-live--sentence-counter
-                              clean-text))))
+                      (format "[%03d] %s\n" chunk-id clean-text))))
 
-(defun whisper-live--insert-into-buffer (clean-text)
-  "Insert CLEAN-TEXT into regular buffer as numbered line."
+(defun whisper-live--insert-chunk-buffer (chunk-id clean-text)
+  "Insert CLEAN-TEXT into regular buffer with CHUNK-ID."
   (when (and (not (string-empty-p clean-text))
              (not (string-empty-p (string-trim clean-text)))
              (not (string-match-p "^[[:space:].,!?;:]*$" clean-text)))
     (let ((inhibit-read-only t))
-      ;; Increment counter
-      (setq whisper-live--sentence-counter
-            (1+ whisper-live--sentence-counter))
-      ;; Go to end marker and insert numbered text
+      ;; Go to end marker and insert numbered text with [001] format
       (goto-char whisper-live--insert-end-marker)
       (when whisper-live-clean-with-llm
         (insert whisper-live-start-tag))
-      (insert
-       (format "%d. %s\n" whisper-live--sentence-counter clean-text))
+      (insert (format "[%03d] %s\n" chunk-id clean-text))
       (when whisper-live-clean-with-llm
         (insert whisper-live-end-tag))
       (set-marker whisper-live--insert-end-marker (point)))))
 
 (defun whisper-live--handle-transcription (text)
-  "Handle transcription TEXT by inserting into buffer."
+  "Handle transcription TEXT by inserting into buffer.
+Stores chunk data and outputs numbered text."
   (when (and text
              (not whisper-live--canceling)  ; Skip if canceling
              (not (string-empty-p (string-trim text)))
@@ -108,20 +97,28 @@
              whisper-live--transcription-text)))
       (when (and (buffer-live-p target-buffer)
                  (not (string-empty-p clean-text)))
-        (with-current-buffer target-buffer
-          (cond
-           ((derived-mode-p 'vterm-mode)
-            ;; VTerm: append numbered line (uses concatenated audio)
-            (whisper-live--insert-into-vterm clean-text))
-           ((derived-mode-p 'term-mode)
-            ;; Term: append numbered line (uses concatenated audio)
-            (whisper-live--insert-into-term clean-text))
-           (buffer-read-only
-            (message "Read-only buffer: %s" clean-text))
-           (t
-            ;; Regular buffer: append numbered line (uses concatenated audio)
-            (whisper-live--insert-into-buffer clean-text))))
-        (run-hooks 'whisper-live-transcribe-hook)))))
+        ;; Increment chunk ID and store chunk data
+        (setq whisper-live--chunk-id (1+ whisper-live--chunk-id))
+        (let ((chunk-entry (list :id whisper-live--chunk-id
+                                 :raw text
+                                 :text clean-text
+                                 :time (current-time))))
+          (push chunk-entry whisper-live--chunks)
+          ;; Output with chunk-based numbering
+          (with-current-buffer target-buffer
+            (cond
+             ((derived-mode-p 'vterm-mode)
+              ;; VTerm: send numbered line directly
+              (whisper-live--insert-chunk-vterm whisper-live--chunk-id clean-text))
+             ((derived-mode-p 'term-mode)
+              ;; Term: send numbered line directly
+              (whisper-live--insert-chunk-term whisper-live--chunk-id clean-text))
+             (buffer-read-only
+              (message "Read-only buffer: [%03d] %s" whisper-live--chunk-id clean-text))
+             (t
+              ;; Regular buffer: insert numbered line
+              (whisper-live--insert-chunk-buffer whisper-live--chunk-id clean-text))))
+          (run-hooks 'whisper-live-transcribe-hook))))))
 
 (defun whisper-live--transcribe-chunk (concatenated-file)
   "Transcribe a single CONCATENATED-FILE."
