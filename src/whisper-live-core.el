@@ -20,6 +20,10 @@
 (defvar whisper-live-beep-on-chunk t
   "Beep when each chunk is recorded.")
 
+(defvar whisper-live-display-words 15
+  "Number of words to display from each transcription chunk.
+Set to nil to display full text.")
+
 (defvar whisper-live--current-process nil
   "Current recording process.")
 

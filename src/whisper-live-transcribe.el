@@ -80,38 +80,26 @@
         (insert whisper-live-end-tag))
       (set-marker whisper-live--insert-end-marker (point)))))
 
-(defun whisper-live--extract-last-sentence (text)
-  "Extract the last complete sentence from TEXT.
-A sentence ends with period, question mark, or exclamation point.
-If no sentence delimiter found, returns the trimmed text."
+(defun whisper-live--extract-last-words (text &optional num-words)
+  "Extract the last NUM-WORDS words from TEXT.
+If NUM-WORDS is nil, uses `whisper-live-display-words`.
+If NUM-WORDS is nil and `whisper-live-display-words` is nil, returns full text."
   (when (and text (not (string-empty-p text)))
-    (let* ((trimmed (string-trim text))
-           ;; Find last sentence delimiter
-           (last-period (string-match-p "\\.[^.]*\\'" trimmed))
-           (last-question (string-match-p "\\?[^?]*\\'" trimmed))
-           (last-exclaim (string-match-p "![^!]*\\'" trimmed))
-           ;; Get the position of the last delimiter
-           (delim-pos (max (or last-period -1)
-                          (or last-question -1)
-                          (or last-exclaim -1))))
-      (if (> delim-pos 0)
-          ;; Extract from after previous delimiter to end
-          (let* ((before-last (substring trimmed 0 (1+ delim-pos)))
-                 ;; Find second-to-last delimiter
-                 (prev-period (string-match-p "\\.[^.]*\\'" before-last 0 delim-pos))
-                 (prev-question (string-match-p "\\?[^?]*\\'" before-last 0 delim-pos))
-                 (prev-exclaim (string-match-p "![^!]*\\'" before-last 0 delim-pos))
-                 (prev-delim (max (or prev-period -1)
-                                 (or prev-question -1)
-                                 (or prev-exclaim -1)))
-                 (start-pos (if (> prev-delim 0) (1+ prev-delim) 0)))
-            (string-trim (substring trimmed start-pos)))
-        ;; No delimiter found - return full text
+    (let* ((word-limit (or num-words whisper-live-display-words))
+           (trimmed (string-trim text)))
+      (if word-limit
+          ;; Split into words and take last N
+          (let* ((words (split-string trimmed))
+                 (word-count (length words))
+                 (start-idx (max 0 (- word-count word-limit)))
+                 (last-words (seq-subseq words start-idx)))
+            (string-join last-words " "))
+        ;; No limit - return full text
         trimmed))))
 
 (defun whisper-live--handle-transcription (text)
   "Handle transcription TEXT by inserting into buffer.
-Stores chunk data and outputs only the last sentence."
+Stores chunk data and outputs only last N words (controlled by `whisper-live-display-words`)."
   (when (and text
              (not whisper-live--canceling)  ; Skip if canceling
              (not (string-empty-p (string-trim text)))
@@ -124,33 +112,33 @@ Stores chunk data and outputs only the last sentence."
            (clean-text
             (whisper--live-remove-tags
              whisper-live--transcription-text))
-           ;; Extract only last sentence for display
-           (last-sentence (whisper-live--extract-last-sentence clean-text)))
+           ;; Extract only last N words for display
+           (display-text (whisper-live--extract-last-words clean-text)))
       (when (and (buffer-live-p target-buffer)
                  (not (string-empty-p clean-text))
-                 (not (string-empty-p last-sentence)))
+                 (not (string-empty-p display-text)))
         ;; Increment chunk ID and store chunk data
         (setq whisper-live--chunk-id (1+ whisper-live--chunk-id))
         (let ((chunk-entry (list :id whisper-live--chunk-id
                                  :raw text
-                                 :text clean-text          ;; Store full text
-                                 :sentence last-sentence   ;; Store displayed sentence
+                                 :text clean-text         ;; Store full text
+                                 :display display-text    ;; Store displayed portion
                                  :time (current-time))))
           (push chunk-entry whisper-live--chunks)
-          ;; Output only LAST SENTENCE with chunk-based numbering
+          ;; Output only LAST N WORDS with chunk-based numbering
           (with-current-buffer target-buffer
             (cond
              ((derived-mode-p 'vterm-mode)
-              ;; VTerm: send numbered sentence
-              (whisper-live--insert-chunk-vterm whisper-live--chunk-id last-sentence))
+              ;; VTerm: send numbered text
+              (whisper-live--insert-chunk-vterm whisper-live--chunk-id display-text))
              ((derived-mode-p 'term-mode)
-              ;; Term: send numbered sentence
-              (whisper-live--insert-chunk-term whisper-live--chunk-id last-sentence))
+              ;; Term: send numbered text
+              (whisper-live--insert-chunk-term whisper-live--chunk-id display-text))
              (buffer-read-only
-              (message "Read-only buffer: [%03d] %s" whisper-live--chunk-id last-sentence))
+              (message "Read-only buffer: [%03d] %s" whisper-live--chunk-id display-text))
              (t
-              ;; Regular buffer: insert numbered sentence
-              (whisper-live--insert-chunk-buffer whisper-live--chunk-id last-sentence))))
+              ;; Regular buffer: insert numbered text
+              (whisper-live--insert-chunk-buffer whisper-live--chunk-id display-text))))
           (run-hooks 'whisper-live-transcribe-hook))))))
 
 (defun whisper-live--transcribe-chunk (concatenated-file)
