@@ -74,9 +74,17 @@
           ;; Remove any trailing whisper_ messages
           (when (string-match "\\(.*?\\)\\(?:whisper_\\|$\\)" text)
             (string-trim (match-string 1 text)))))
-       ;; Pattern 1: Standard "\n\n TEXT\n\n" format
+       ;; Pattern 1: Standard "\n\n TEXT\n\n" format (skip system lines)
        ((string-match "\n\n[ \t]*\\(.+\\)[ \t]*\n\n" output)
-        (match-string 1 output))
+        (let ((text (match-string 1 output)))
+          ;; Skip if it's a system_info or main: line
+          (if (or (string-match-p "^system_info:" text)
+                  (string-match-p "^main:" text)
+                  (string-match-p " = .* | " text))
+              ;; Try to find actual transcription after system lines
+              (when (string-match "main:.*\n+\\(.+\\)" output)
+                (match-string 1 output))
+            text)))
        ;; Pattern 2: Text after all model loading messages (more flexible)
        ((string-match "whisper_model_load:.*\n+\\(.+\\)" output)
         (let ((text (match-string 1 output)))
