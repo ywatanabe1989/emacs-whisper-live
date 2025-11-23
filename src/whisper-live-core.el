@@ -330,11 +330,10 @@ This is called periodically to check silence duration."
 
 ;; Language switcher
 
-(defvar whisper-live-languages '("en" "ja")
+(defvar whisper-live-languages '("en" "ja" "auto")
   "List of languages to cycle through.
-Default is English (en) and Japanese (ja).
-You can also use 'auto' for automatic language detection, or other
-ISO 639-1 codes like 'zh', 'es', 'fr', etc.")
+Default is English (en), Japanese (ja), and auto-detect (auto).
+You can customize this list with other ISO 639-1 codes like 'zh', 'es', 'fr', etc.")
 
 (defvar whisper-live-default-language "ja"
   "Default language for whisper-live transcription.
