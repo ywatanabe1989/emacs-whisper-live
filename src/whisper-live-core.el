@@ -319,12 +319,8 @@ This is called periodically to check silence duration."
                            nil
                            #'whisper-live--auto-stop-on-max-duration)))
 
-    (message "[whisper-live] Auto-stop enabled: idle=%dmin, silence=%dsec, max=%smin"
-             whisper-live-idle-timeout
-             whisper-live-silence-timeout
-             (if whisper-live-max-session-duration
-                 (number-to-string whisper-live-max-session-duration)
-               "disabled"))))
+    ;; Silently enable auto-stop timers
+    nil))
 
 (defun whisper-live--update-activity-time ()
   "Update last activity time when transcription occurs."

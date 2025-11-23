@@ -45,10 +45,15 @@
             (replace-regexp-in-string
              "\\[BLANK_AUDIO\\]\\|\\[_BEG_\\]\\|\\[_TT_[0-9]+\\]" ""
              cleaned))
-      ;; Remove parenthetical noise markers like (background noise)
+      ;; Remove parenthetical noise markers like (background noise), (lips smacking)
       (setq cleaned
             (replace-regexp-in-string
-             "([^)]*noise[^)]*)" ""
+             "(\\(?:lips smacking\\|background noise\\|inaudible\\|coughing\\|breathing\\|music\\)[^)]*)" ""
+             cleaned))
+      ;; Remove any remaining parenthetical sound descriptions
+      (setq cleaned
+            (replace-regexp-in-string
+             "(\\s-*)" ""  ;; Empty parentheses
              cleaned))
       ;; Remove line-start whisper messages
       (setq cleaned
@@ -232,16 +237,13 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
                                (setq
                                 whisper-live--transcription-duration
                                 duration)
-                               ;; Debug: show raw output when text is empty OR for Japanese
+                               ;; Debug: show raw output only when text is empty
                                (when
                                    (or (not text)
                                        (string-empty-p
-                                        (string-trim text))
-                                       (string-equal whisper-language "auto")
-                                       (string-equal whisper-language "ja"))
+                                        (string-trim text)))
                                  (message
-                                  "[whisper-live] DEBUG - Raw output (lang=%s):\n%s"
-                                  whisper-language
+                                  "[whisper-live] DEBUG - Empty text! Raw output:\n%s"
                                   (substring raw-output 0
                                              (min 1000
                                                   (length raw-output)))))
@@ -253,15 +255,17 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
                                    (with-temp-file debug-file
                                      (insert raw-output))
                                    (message "[whisper-live] Debug output saved to: %s" debug-file)))
-                               ;; Show info in messages
-                               (message
-                                "[whisper-live] Transcription #%d took %.2fs: %s"
-                                (1+ whisper-live--sentence-counter)
-                                duration
-                                (if text
-                                    (substring text 0
-                                               (min 50 (length text)))
-                                  ""))
+                               ;; Show brief info in messages (only if empty or verbose mode)
+                               (when (or (not text)
+                                        (string-empty-p (string-trim text)))
+                                 (message
+                                  "[whisper-live] Transcription #%d took %.2fs: %s"
+                                  (1+ whisper-live--sentence-counter)
+                                  duration
+                                  (if text
+                                      (substring text 0
+                                                 (min 50 (length text)))
+                                    "empty")))
                                (whisper-live--handle-transcription
                                 text))
                              (setq whisper-live--current-transcription
@@ -289,18 +293,13 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
                       "-y" ,chunk-file)
            :sentinel (lambda (_process event)
                        (when (string-equal "finished\n" event)
-                         (message
-                          "[whisper-live] Chunk recorded, beep-on-chunk=%s"
-                          whisper-live-beep-on-chunk)
+                         ;; Beep without verbose messages
                          (when whisper-live-beep-on-chunk
-                           (whisper-live--beep whisper-live-beep-chunk-frequency 200 2)
-                           (message "[whisper-live] Chunk beep (2x mid tone)!"))
+                           (whisper-live--beep whisper-live-beep-chunk-frequency 200 2))
                          ;; Transcribe concatenated chunks for better context
                          (let ((combined-file
                                 (whisper-live--concatenate-chunks
                                  whisper-live--chunks-directory)))
-                           (message "[whisper-live] Combined file: %s"
-                                    combined-file)
                            (push combined-file
                                  whisper-live--transcription-queue)
                            (whisper-live--process-transcription-queue))))))))
