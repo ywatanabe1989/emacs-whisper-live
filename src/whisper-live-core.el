@@ -152,6 +152,8 @@ If CANCELING is non-nil, set canceling flag to prevent insertions."
     (setq whisper-live--transcription-queue nil))
   ;; Cancel auto-stop timers
   (whisper-live--cancel-auto-stop-timers)
+  ;; Remove mode line indicator
+  (whisper-live--remove-mode-line)
   (setq whisper-live--current-process nil
         whisper-live--current-transcription nil
         whisper-live--transcription-text nil
@@ -342,6 +344,41 @@ Set to 'auto' for automatic language detection.")
 (defvar whisper-live-debug-output nil
   "Enable debug output for transcription.
 When t, saves raw whisper output to /tmp/whisper-live-debug-*.txt files.")
+
+;; Mode line indicator
+(defvar whisper-live-mode-line-format '(:eval (whisper-live--mode-line-string))
+  "Mode line format for whisper-live.")
+
+(defvar whisper-live-show-in-mode-line t
+  "Show recording status in mode line when non-nil.")
+
+(defun whisper-live--mode-line-string ()
+  "Generate mode line string for whisper-live status."
+  (when (and whisper-live-show-in-mode-line
+             whisper-live--current-process)
+    (let ((lang-str (cond
+                     ((string-equal whisper-language "auto") "🌐")
+                     ((string-equal whisper-language "en") "EN")
+                     ((string-equal whisper-language "ja") "JA")
+                     (t (upcase whisper-language))))
+          (transcribing (when whisper-live--current-transcription "📝")))
+      (propertize (format " 🎤%s%s " lang-str (or transcribing ""))
+                  'face '(:foreground "red" :weight bold)
+                  'help-echo (format "Whisper Live: Recording (%s)" whisper-language)))))
+
+(defun whisper-live--add-mode-line ()
+  "Add whisper-live indicator to mode line."
+  (when whisper-live-show-in-mode-line
+    (unless (member whisper-live-mode-line-format global-mode-string)
+      (setq global-mode-string
+            (append global-mode-string (list whisper-live-mode-line-format)))
+      (force-mode-line-update t))))
+
+(defun whisper-live--remove-mode-line ()
+  "Remove whisper-live indicator from mode line."
+  (setq global-mode-string
+        (remove whisper-live-mode-line-format global-mode-string))
+  (force-mode-line-update t))
 
 (defun whisper-live-switch-language ()
   "Cycle through configured languages for whisper transcription.

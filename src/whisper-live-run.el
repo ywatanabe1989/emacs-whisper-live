@@ -38,6 +38,8 @@
           whisper-live--insert-marker (point-marker)
           whisper-live--insert-end-marker (point-marker))
     (set-marker whisper-live--insert-end-marker (point))
+    ;; Add mode line indicator
+    (whisper-live--add-mode-line)
     ;; Start auto-stop timers if enabled
     (whisper-live--start-auto-stop-timers)
     (whisper-live--record-chunk)
