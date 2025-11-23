@@ -251,7 +251,9 @@ Otherwise uses wsl2-buzzer.sh if available, or falls back to system beep."
 
 (defun whisper-live--auto-stop-on-idle ()
   "Auto-stop transcription due to Emacs idle."
-  (when whisper-live--current-process
+  (when (and whisper-live--current-process
+             ;; Don't stop if transcription is in progress
+             (not whisper-live--current-transcription))
     (message "[whisper-live] Auto-stopping due to Emacs idle (%d min)"
              whisper-live-idle-timeout)
     (whisper-live--cleanup)
@@ -261,7 +263,9 @@ Otherwise uses wsl2-buzzer.sh if available, or falls back to system beep."
 (defun whisper-live--auto-stop-on-silence ()
   "Auto-stop transcription due to prolonged silence."
   (when (and whisper-live--current-process
-             whisper-live--last-activity-time)
+             whisper-live--last-activity-time
+             ;; Don't stop if transcription is in progress
+             (not whisper-live--current-transcription))
     (let ((silence-duration (float-time
                              (time-subtract (current-time)
                                           whisper-live--last-activity-time))))
