@@ -80,26 +80,38 @@
         (insert whisper-live-end-tag))
       (set-marker whisper-live--insert-end-marker (point)))))
 
-(defun whisper-live--extract-delta-text (current-text)
-  "Extract only new text from CURRENT-TEXT by comparing with previous chunk.
-Returns the delta (new text only) if previous chunk exists, otherwise returns full text."
-  (if (null whisper-live--chunks)
-      ;; First chunk - return full text
-      current-text
-    ;; Get the most recent chunk (first in list since we push)
-    (let* ((last-chunk (car whisper-live--chunks))
-           (last-text (plist-get last-chunk :text)))
-      (if (and last-text
-               (string-prefix-p last-text current-text))
-          ;; Current text starts with previous text - extract delta
-          (let ((delta (substring current-text (length last-text))))
-            (string-trim delta))
-        ;; No clear overlap - return full text
-        current-text))))
+(defun whisper-live--extract-last-sentence (text)
+  "Extract the last complete sentence from TEXT.
+A sentence ends with period, question mark, or exclamation point.
+If no sentence delimiter found, returns the trimmed text."
+  (when (and text (not (string-empty-p text)))
+    (let* ((trimmed (string-trim text))
+           ;; Find last sentence delimiter
+           (last-period (string-match-p "\\.[^.]*\\'" trimmed))
+           (last-question (string-match-p "\\?[^?]*\\'" trimmed))
+           (last-exclaim (string-match-p "![^!]*\\'" trimmed))
+           ;; Get the position of the last delimiter
+           (delim-pos (max (or last-period -1)
+                          (or last-question -1)
+                          (or last-exclaim -1))))
+      (if (> delim-pos 0)
+          ;; Extract from after previous delimiter to end
+          (let* ((before-last (substring trimmed 0 (1+ delim-pos)))
+                 ;; Find second-to-last delimiter
+                 (prev-period (string-match-p "\\.[^.]*\\'" before-last 0 delim-pos))
+                 (prev-question (string-match-p "\\?[^?]*\\'" before-last 0 delim-pos))
+                 (prev-exclaim (string-match-p "![^!]*\\'" before-last 0 delim-pos))
+                 (prev-delim (max (or prev-period -1)
+                                 (or prev-question -1)
+                                 (or prev-exclaim -1)))
+                 (start-pos (if (> prev-delim 0) (1+ prev-delim) 0)))
+            (string-trim (substring trimmed start-pos)))
+        ;; No delimiter found - return full text
+        trimmed))))
 
 (defun whisper-live--handle-transcription (text)
   "Handle transcription TEXT by inserting into buffer.
-Stores chunk data and outputs only new (delta) text."
+Stores chunk data and outputs only the last sentence."
   (when (and text
              (not whisper-live--canceling)  ; Skip if canceling
              (not (string-empty-p (string-trim text)))
@@ -112,33 +124,33 @@ Stores chunk data and outputs only new (delta) text."
            (clean-text
             (whisper--live-remove-tags
              whisper-live--transcription-text))
-           ;; Extract only new text (delta) for display
-           (delta-text (whisper-live--extract-delta-text clean-text)))
+           ;; Extract only last sentence for display
+           (last-sentence (whisper-live--extract-last-sentence clean-text)))
       (when (and (buffer-live-p target-buffer)
                  (not (string-empty-p clean-text))
-                 (not (string-empty-p delta-text)))
-        ;; Increment chunk ID and store chunk data with FULL text
+                 (not (string-empty-p last-sentence)))
+        ;; Increment chunk ID and store chunk data
         (setq whisper-live--chunk-id (1+ whisper-live--chunk-id))
         (let ((chunk-entry (list :id whisper-live--chunk-id
                                  :raw text
-                                 :text clean-text      ;; Store full text for next comparison
-                                 :delta delta-text     ;; Store delta for reference
+                                 :text clean-text          ;; Store full text
+                                 :sentence last-sentence   ;; Store displayed sentence
                                  :time (current-time))))
           (push chunk-entry whisper-live--chunks)
-          ;; Output only DELTA text with chunk-based numbering
+          ;; Output only LAST SENTENCE with chunk-based numbering
           (with-current-buffer target-buffer
             (cond
              ((derived-mode-p 'vterm-mode)
-              ;; VTerm: send numbered delta line
-              (whisper-live--insert-chunk-vterm whisper-live--chunk-id delta-text))
+              ;; VTerm: send numbered sentence
+              (whisper-live--insert-chunk-vterm whisper-live--chunk-id last-sentence))
              ((derived-mode-p 'term-mode)
-              ;; Term: send numbered delta line
-              (whisper-live--insert-chunk-term whisper-live--chunk-id delta-text))
+              ;; Term: send numbered sentence
+              (whisper-live--insert-chunk-term whisper-live--chunk-id last-sentence))
              (buffer-read-only
-              (message "Read-only buffer: [%03d] %s" whisper-live--chunk-id delta-text))
+              (message "Read-only buffer: [%03d] %s" whisper-live--chunk-id last-sentence))
              (t
-              ;; Regular buffer: insert numbered delta line
-              (whisper-live--insert-chunk-buffer whisper-live--chunk-id delta-text))))
+              ;; Regular buffer: insert numbered sentence
+              (whisper-live--insert-chunk-buffer whisper-live--chunk-id last-sentence))))
           (run-hooks 'whisper-live-transcribe-hook))))))
 
 (defun whisper-live--transcribe-chunk (concatenated-file)
