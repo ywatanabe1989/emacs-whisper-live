@@ -48,7 +48,7 @@
       ;; Remove parenthetical noise markers like (background noise), (lips smacking)
       (setq cleaned
             (replace-regexp-in-string
-             "(\\(?:lips smacking\\|background noise\\|inaudible\\|coughing\\|breathing\\|music\\)[^)]*)" ""
+             "(\\(?:lips smacking\\|background noise\\|inaudible\\|coughing\\|breathing\\|music\\|whimpering\\)[^)]*)" ""
              cleaned))
       ;; Remove any remaining parenthetical sound descriptions
       (setq cleaned
@@ -86,12 +86,15 @@
        ;; Pattern 3: Any text after the model info, before process ends
        ((string-match "whisper_full_.*\n+\\([^\n]+\\)" output)
         (match-string 1 output))
-       ;; Pattern 4: Last substantial line that's not a whisper_ message
+       ;; Pattern 4: Last substantial line that's not a system/whisper message
        (t
         (let ((lines (split-string output "\n" t)))
           (cl-loop for line in (reverse lines)
                    when (and (not (string-match-p "^whisper_" line))
                              (not (string-match-p "^main:" line))
+                             (not (string-match-p "^system_info:" line))
+                             ;; Skip lines with system info pattern (contains = and |)
+                             (not (string-match-p " = .* | " line))
                              (> (length (string-trim line)) 0))
                    return (string-trim line))))))))
 
