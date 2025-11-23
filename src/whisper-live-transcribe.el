@@ -106,6 +106,8 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
              (not (string-match-p "^[[:space:].,]*$" text))
              (markerp whisper-live--insert-marker)
              (markerp whisper-live--insert-end-marker))
+    ;; Update activity time for auto-stop tracking
+    (whisper-live--update-activity-time)
     (setq whisper-live--transcription-text
           (whisper-live--clean-transcript text))
     (let* ((target-buffer (marker-buffer whisper-live--insert-marker))

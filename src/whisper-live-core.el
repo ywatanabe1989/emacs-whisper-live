@@ -59,6 +59,35 @@
   "Number of words to display from each transcription chunk.
 Set to nil to display full text.")
 
+;; Auto-stop configuration
+(defvar whisper-live-auto-stop-on-idle t
+  "Enable automatic stop when Emacs is idle or silent.")
+
+(defvar whisper-live-idle-timeout 5
+  "Minutes of Emacs idle time before auto-stopping transcription.")
+
+(defvar whisper-live-silence-timeout 60
+  "Seconds of silence (no transcription) before auto-stopping.")
+
+(defvar whisper-live-max-session-duration 30
+  "Maximum session duration in minutes. Hard stop after this time.
+Set to nil to disable hard stop.")
+
+(defvar whisper-live--idle-timer nil
+  "Timer for detecting Emacs idle state.")
+
+(defvar whisper-live--silence-timer nil
+  "Timer for checking silence duration.")
+
+(defvar whisper-live--session-timer nil
+  "Timer for maximum session duration hard stop.")
+
+(defvar whisper-live--last-activity-time nil
+  "Time of last transcription activity.")
+
+(defvar whisper-live--session-start-time nil
+  "Time when recording session started.")
+
 (defvar whisper-live--current-process nil
   "Current recording process.")
 
@@ -121,13 +150,17 @@ If CANCELING is non-nil, set canceling flag to prevent insertions."
     (delete-process whisper-live--current-transcription))
   (when whisper-live--transcription-queue
     (setq whisper-live--transcription-queue nil))
+  ;; Cancel auto-stop timers
+  (whisper-live--cancel-auto-stop-timers)
   (setq whisper-live--current-process nil
         whisper-live--current-transcription nil
         whisper-live--transcription-text nil
         whisper-live--last-sent-length 0
         whisper-live--sentence-counter 0
         whisper-live--chunk-id 0
-        whisper-live--chunks nil)
+        whisper-live--chunks nil
+        whisper-live--last-activity-time nil
+        whisper-live--session-start-time nil)
   (whisper-live--cleanup-markers)
   ;; Reset canceling flag after a short delay
   (when canceling
@@ -201,6 +234,125 @@ Otherwise uses wsl2-buzzer.sh if available, or falls back to system beep."
           (beep)
           (when (> repeats 1)
             (sit-for 0.1)))))))
+
+;; Auto-stop timer functions
+
+(defun whisper-live--cancel-auto-stop-timers ()
+  "Cancel all auto-stop timers."
+  (when whisper-live--idle-timer
+    (cancel-timer whisper-live--idle-timer)
+    (setq whisper-live--idle-timer nil))
+  (when whisper-live--silence-timer
+    (cancel-timer whisper-live--silence-timer)
+    (setq whisper-live--silence-timer nil))
+  (when whisper-live--session-timer
+    (cancel-timer whisper-live--session-timer)
+    (setq whisper-live--session-timer nil)))
+
+(defun whisper-live--auto-stop-on-idle ()
+  "Auto-stop transcription due to Emacs idle."
+  (when whisper-live--current-process
+    (message "[whisper-live] Auto-stopping due to Emacs idle (%d min)"
+             whisper-live-idle-timeout)
+    (whisper-live--cleanup)
+    (when whisper-live-beep-on-stop
+      (whisper-live--beep whisper-live-beep-stop-frequency 300 1))))
+
+(defun whisper-live--auto-stop-on-silence ()
+  "Auto-stop transcription due to prolonged silence."
+  (when (and whisper-live--current-process
+             whisper-live--last-activity-time)
+    (let ((silence-duration (float-time
+                             (time-subtract (current-time)
+                                          whisper-live--last-activity-time))))
+      (when (> silence-duration whisper-live-silence-timeout)
+        (message "[whisper-live] Auto-stopping due to silence (%.0f sec)"
+                 silence-duration)
+        (whisper-live--cleanup)
+        (when whisper-live-beep-on-stop
+          (whisper-live--beep whisper-live-beep-stop-frequency 300 1))))))
+
+(defun whisper-live--auto-stop-on-max-duration ()
+  "Auto-stop transcription due to maximum session duration."
+  (when whisper-live--current-process
+    (message "[whisper-live] Auto-stopping: max session duration reached (%d min)"
+             whisper-live-max-session-duration)
+    (whisper-live--cleanup)
+    (when whisper-live-beep-on-stop
+      (whisper-live--beep whisper-live-beep-stop-frequency 300 1))))
+
+(defun whisper-live--check-silence ()
+  "Check for silence and auto-stop if needed.
+This is called periodically to check silence duration."
+  (when (and whisper-live-auto-stop-on-idle
+             whisper-live--current-process)
+    (whisper-live--auto-stop-on-silence)))
+
+(defun whisper-live--start-auto-stop-timers ()
+  "Start auto-stop timers if enabled."
+  (when whisper-live-auto-stop-on-idle
+    ;; Cancel any existing timers first
+    (whisper-live--cancel-auto-stop-timers)
+
+    ;; Initialize activity tracking
+    (setq whisper-live--last-activity-time (current-time)
+          whisper-live--session-start-time (current-time))
+
+    ;; Start idle timer (triggers when Emacs is idle)
+    (setq whisper-live--idle-timer
+          (run-with-idle-timer (* whisper-live-idle-timeout 60)
+                              nil
+                              #'whisper-live--auto-stop-on-idle))
+
+    ;; Start periodic silence checker (every 10 seconds)
+    (setq whisper-live--silence-timer
+          (run-with-timer 10 10 #'whisper-live--check-silence))
+
+    ;; Start max session duration timer if configured
+    (when whisper-live-max-session-duration
+      (setq whisper-live--session-timer
+            (run-with-timer (* whisper-live-max-session-duration 60)
+                           nil
+                           #'whisper-live--auto-stop-on-max-duration)))
+
+    (message "[whisper-live] Auto-stop enabled: idle=%dmin, silence=%dsec, max=%smin"
+             whisper-live-idle-timeout
+             whisper-live-silence-timeout
+             (if whisper-live-max-session-duration
+                 (number-to-string whisper-live-max-session-duration)
+               "disabled"))))
+
+(defun whisper-live--update-activity-time ()
+  "Update last activity time when transcription occurs."
+  (setq whisper-live--last-activity-time (current-time)))
+
+;; Language switcher
+
+(defvar whisper-live-languages '("en" "ja")
+  "List of languages to cycle through.
+Default is English (en) and Japanese (ja).")
+
+(defun whisper-live-switch-language ()
+  "Cycle through configured languages for whisper transcription.
+Cycles through languages in `whisper-live-languages' list."
+  (interactive)
+  (let* ((current whisper-language)
+         (current-idx (cl-position current whisper-live-languages :test #'string=))
+         (next-idx (if current-idx
+                      (mod (1+ current-idx) (length whisper-live-languages))
+                    0))
+         (next-lang (nth next-idx whisper-live-languages)))
+    (setq whisper-language next-lang)
+    ;; Warn if using .en model with non-English language
+    (when (and (not (string-equal next-lang "en"))
+               (string-suffix-p ".en" whisper-model))
+      (warn "[whisper-live] WARNING: Using .en model (%s) with %s language. \
+This may cause empty transcriptions. Use generic model (without .en) instead."
+            whisper-model next-lang))
+    (message "[whisper-live] Language switched: %s -> %s (model: %s%s)"
+             current next-lang whisper-model
+             (if whisper-quantize (concat "-" whisper-quantize) ""))
+    next-lang))
 
 (defvar whisper-live--initialized nil
   "Flag to track if whisper-live has been initialized.")

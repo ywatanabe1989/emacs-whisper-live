@@ -40,6 +40,8 @@
           whisper-live--insert-marker (point-marker)
           whisper-live--insert-end-marker (point-marker))
     (set-marker whisper-live--insert-end-marker (point))
+    ;; Start auto-stop timers if enabled
+    (whisper-live--start-auto-stop-timers)
     (whisper-live--record-chunk)
     (message "[whisper-live] Starting, beep-on-start=%s"
              whisper-live-beep-on-start)
