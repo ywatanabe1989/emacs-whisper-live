@@ -30,25 +30,30 @@
   "Clean transcript TEXT by removing noise and brackets."
   (when text
     (let ((cleaned text))
-      ;; Remove whisper progress messages
+      ;; Remove whisper progress messages (can appear inline with text)
       (setq cleaned
             (replace-regexp-in-string
-             "whisper_print_progress_callback: progress = +[0-9]+%" ""
+             "whisper_print_progress_callback: progress = +[0-9]+%?" ""
+             cleaned))
+      ;; Remove any whisper_ system messages that might be inline
+      (setq cleaned
+            (replace-regexp-in-string
+             "whisper_[a-z_]+:" ""
              cleaned))
       ;; Remove [BLANK_AUDIO] and similar markers (but keep Japanese brackets like 「」)
       (setq cleaned
             (replace-regexp-in-string
              "\\[BLANK_AUDIO\\]\\|\\[_BEG_\\]\\|\\[_TT_[0-9]+\\]" ""
              cleaned))
-      ;; Remove whisper system messages
-      (setq cleaned
-            (replace-regexp-in-string
-             "^whisper_.*$" ""
-             cleaned))
       ;; Remove parenthetical noise markers like (background noise)
       (setq cleaned
             (replace-regexp-in-string
              "([^)]*noise[^)]*)" ""
+             cleaned))
+      ;; Remove line-start whisper messages
+      (setq cleaned
+            (replace-regexp-in-string
+             "^whisper_.*$" ""
              cleaned))
       (string-trim cleaned))))
 
@@ -58,6 +63,12 @@
     (let ((output (buffer-string)))
       ;; Try multiple patterns to extract text
       (cond
+       ;; Pattern 0: Text after language detection (best for Japanese)
+       ((string-match "auto-detected language:.*?\\([a-z]+\\).*?\n\n\\([^\n]*\\)" output)
+        (let ((text (match-string 2 output)))
+          ;; Remove any trailing whisper_ messages
+          (when (string-match "\\(.*?\\)\\(?:whisper_\\|$\\)" text)
+            (string-trim (match-string 1 text)))))
        ;; Pattern 1: Standard "\n\n TEXT\n\n" format
        ((string-match "\n\n[ \t]*\\(.+\\)[ \t]*\n\n" output)
         (match-string 1 output))
