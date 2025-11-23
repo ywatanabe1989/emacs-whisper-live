@@ -330,10 +330,114 @@ This is called periodically to check silence duration."
 
 ;; Language switcher
 
+(defvar whisper-live-supported-languages
+  '(("auto" . "Auto-detect")
+    ("en" . "English")
+    ("ja" . "Japanese")
+    ("zh" . "Chinese")
+    ("de" . "German")
+    ("es" . "Spanish")
+    ("ru" . "Russian")
+    ("ko" . "Korean")
+    ("fr" . "French")
+    ("pt" . "Portuguese")
+    ("tr" . "Turkish")
+    ("pl" . "Polish")
+    ("ca" . "Catalan")
+    ("nl" . "Dutch")
+    ("ar" . "Arabic")
+    ("sv" . "Swedish")
+    ("it" . "Italian")
+    ("id" . "Indonesian")
+    ("hi" . "Hindi")
+    ("fi" . "Finnish")
+    ("vi" . "Vietnamese")
+    ("he" . "Hebrew")
+    ("uk" . "Ukrainian")
+    ("el" . "Greek")
+    ("ms" . "Malay")
+    ("cs" . "Czech")
+    ("ro" . "Romanian")
+    ("da" . "Danish")
+    ("hu" . "Hungarian")
+    ("ta" . "Tamil")
+    ("no" . "Norwegian")
+    ("th" . "Thai")
+    ("ur" . "Urdu")
+    ("hr" . "Croatian")
+    ("bg" . "Bulgarian")
+    ("lt" . "Lithuanian")
+    ("la" . "Latin")
+    ("mi" . "Maori")
+    ("ml" . "Malayalam")
+    ("cy" . "Welsh")
+    ("sk" . "Slovak")
+    ("te" . "Telugu")
+    ("fa" . "Persian")
+    ("lv" . "Latvian")
+    ("bn" . "Bengali")
+    ("sr" . "Serbian")
+    ("az" . "Azerbaijani")
+    ("sl" . "Slovenian")
+    ("kn" . "Kannada")
+    ("et" . "Estonian")
+    ("mk" . "Macedonian")
+    ("br" . "Breton")
+    ("eu" . "Basque")
+    ("is" . "Icelandic")
+    ("hy" . "Armenian")
+    ("ne" . "Nepali")
+    ("mn" . "Mongolian")
+    ("bs" . "Bosnian")
+    ("kk" . "Kazakh")
+    ("sq" . "Albanian")
+    ("sw" . "Swahili")
+    ("gl" . "Galician")
+    ("mr" . "Marathi")
+    ("pa" . "Punjabi")
+    ("si" . "Sinhala")
+    ("km" . "Khmer")
+    ("sn" . "Shona")
+    ("yo" . "Yoruba")
+    ("so" . "Somali")
+    ("af" . "Afrikaans")
+    ("oc" . "Occitan")
+    ("ka" . "Georgian")
+    ("be" . "Belarusian")
+    ("tg" . "Tajik")
+    ("sd" . "Sindhi")
+    ("gu" . "Gujarati")
+    ("am" . "Amharic")
+    ("yi" . "Yiddish")
+    ("lo" . "Lao")
+    ("uz" . "Uzbek")
+    ("fo" . "Faroese")
+    ("ht" . "Haitian Creole")
+    ("ps" . "Pashto")
+    ("tk" . "Turkmen")
+    ("nn" . "Nynorsk")
+    ("mt" . "Maltese")
+    ("sa" . "Sanskrit")
+    ("lb" . "Luxembourgish")
+    ("my" . "Myanmar")
+    ("bo" . "Tibetan")
+    ("tl" . "Tagalog")
+    ("mg" . "Malagasy")
+    ("as" . "Assamese")
+    ("tt" . "Tatar")
+    ("haw" . "Hawaiian")
+    ("ln" . "Lingala")
+    ("ha" . "Hausa")
+    ("ba" . "Bashkir")
+    ("jw" . "Javanese")
+    ("su" . "Sundanese"))
+  "Alist of supported languages for whisper transcription.
+Format: (CODE . NAME) where CODE is ISO 639-1 code and NAME is display name.")
+
 (defvar whisper-live-languages '("en" "ja" "auto")
-  "List of languages to cycle through.
+  "List of languages to cycle through with `whisper-live-switch-language'.
 Default is English (en), Japanese (ja), and auto-detect (auto).
-You can customize this list with other ISO 639-1 codes like 'zh', 'es', 'fr', etc.")
+You can customize this list with codes from `whisper-live-supported-languages'.")
 
 (defvar whisper-live-default-language "ja"
   "Default language for whisper-live transcription.
@@ -378,28 +482,66 @@ When t, saves raw whisper output to /tmp/whisper-live-debug-*.txt files.")
         (remove whisper-live-mode-line-format global-mode-string))
   (force-mode-line-update t))
 
-(defun whisper-live-switch-language ()
-  "Cycle through configured languages for whisper transcription.
-Cycles through languages in `whisper-live-languages' list."
+(defun whisper-live-select-language ()
+  "Select language for whisper transcription with completion.
+Offers all supported languages from `whisper-live-supported-languages'."
   (interactive)
   (let* ((current whisper-language)
-         (current-idx (cl-position current whisper-live-languages :test #'string=))
-         (next-idx (if current-idx
-                      (mod (1+ current-idx) (length whisper-live-languages))
-                    0))
-         (next-lang (nth next-idx whisper-live-languages)))
-    (setq whisper-language next-lang)
-    ;; Warn if using .en model with non-English language
-    (when (and (not (string-equal next-lang "en"))
-               (not (string-equal next-lang "auto"))
-               (string-suffix-p ".en" whisper-model))
-      (warn "[whisper-live] WARNING: Using .en model (%s) with %s language. \
+         (current-name (or (cdr (assoc current whisper-live-supported-languages))
+                          current))
+         ;; Create completion candidates with format "code - Name"
+         (candidates (mapcar (lambda (lang)
+                              (cons (format "%s - %s" (car lang) (cdr lang))
+                                    (car lang)))
+                            whisper-live-supported-languages))
+         (prompt (format "Select language [current: %s - %s]: "
+                        current current-name))
+         (selection (completing-read prompt candidates nil t))
+         (new-lang (cdr (assoc selection candidates))))
+    (when new-lang
+      (setq whisper-language new-lang)
+      ;; Warn if using .en model with non-English language
+      (when (and (not (string-equal new-lang "en"))
+                 (not (string-equal new-lang "auto"))
+                 (string-suffix-p ".en" whisper-model))
+        (warn "[whisper-live] WARNING: Using .en model (%s) with %s language. \
 This may cause empty transcriptions. Use generic model (without .en) instead."
-            whisper-model next-lang))
-    (message "[whisper-live] Language switched: %s -> %s (model: %s%s)"
-             current next-lang whisper-model
-             (if whisper-quantize (concat "-" whisper-quantize) ""))
-    next-lang))
+              whisper-model new-lang))
+      (message "[whisper-live] Language switched: %s -> %s (model: %s%s)"
+               current new-lang whisper-model
+               (if whisper-quantize (concat "-" whisper-quantize) ""))
+      (force-mode-line-update t)
+      new-lang)))
+
+(defun whisper-live-switch-language (&optional cycle)
+  "Switch language for whisper transcription.
+With prefix argument CYCLE (or when called non-interactively with CYCLE=t),
+cycles through languages in `whisper-live-languages' list.
+Otherwise, offers interactive selection with completion from all supported languages."
+  (interactive "P")
+  (if cycle
+      ;; Cycle through predefined list
+      (let* ((current whisper-language)
+             (current-idx (cl-position current whisper-live-languages :test #'string=))
+             (next-idx (if current-idx
+                          (mod (1+ current-idx) (length whisper-live-languages))
+                        0))
+             (next-lang (nth next-idx whisper-live-languages)))
+        (setq whisper-language next-lang)
+        ;; Warn if using .en model with non-English language
+        (when (and (not (string-equal next-lang "en"))
+                   (not (string-equal next-lang "auto"))
+                   (string-suffix-p ".en" whisper-model))
+          (warn "[whisper-live] WARNING: Using .en model (%s) with %s language. \
+This may cause empty transcriptions. Use generic model (without .en) instead."
+                whisper-model next-lang))
+        (message "[whisper-live] Language switched: %s -> %s (model: %s%s)"
+                 current next-lang whisper-model
+                 (if whisper-quantize (concat "-" whisper-quantize) ""))
+        (force-mode-line-update t)
+        next-lang)
+    ;; Interactive selection with completion
+    (whisper-live-select-language)))
 
 (defvar whisper-live--initialized nil
   "Flag to track if whisper-live has been initialized.")
