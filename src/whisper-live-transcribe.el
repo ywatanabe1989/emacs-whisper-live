@@ -80,9 +80,26 @@
         (insert whisper-live-end-tag))
       (set-marker whisper-live--insert-end-marker (point)))))
 
+(defun whisper-live--extract-delta-text (current-text)
+  "Extract only new text from CURRENT-TEXT by comparing with previous chunk.
+Returns the delta (new text only) if previous chunk exists, otherwise returns full text."
+  (if (null whisper-live--chunks)
+      ;; First chunk - return full text
+      current-text
+    ;; Get the most recent chunk (first in list since we push)
+    (let* ((last-chunk (car whisper-live--chunks))
+           (last-text (plist-get last-chunk :text)))
+      (if (and last-text
+               (string-prefix-p last-text current-text))
+          ;; Current text starts with previous text - extract delta
+          (let ((delta (substring current-text (length last-text))))
+            (string-trim delta))
+        ;; No clear overlap - return full text
+        current-text))))
+
 (defun whisper-live--handle-transcription (text)
   "Handle transcription TEXT by inserting into buffer.
-Stores chunk data and outputs numbered text."
+Stores chunk data and outputs only new (delta) text."
   (when (and text
              (not whisper-live--canceling)  ; Skip if canceling
              (not (string-empty-p (string-trim text)))
@@ -94,30 +111,34 @@ Stores chunk data and outputs numbered text."
     (let* ((target-buffer (marker-buffer whisper-live--insert-marker))
            (clean-text
             (whisper--live-remove-tags
-             whisper-live--transcription-text)))
+             whisper-live--transcription-text))
+           ;; Extract only new text (delta) for display
+           (delta-text (whisper-live--extract-delta-text clean-text)))
       (when (and (buffer-live-p target-buffer)
-                 (not (string-empty-p clean-text)))
-        ;; Increment chunk ID and store chunk data
+                 (not (string-empty-p clean-text))
+                 (not (string-empty-p delta-text)))
+        ;; Increment chunk ID and store chunk data with FULL text
         (setq whisper-live--chunk-id (1+ whisper-live--chunk-id))
         (let ((chunk-entry (list :id whisper-live--chunk-id
                                  :raw text
-                                 :text clean-text
+                                 :text clean-text      ;; Store full text for next comparison
+                                 :delta delta-text     ;; Store delta for reference
                                  :time (current-time))))
           (push chunk-entry whisper-live--chunks)
-          ;; Output with chunk-based numbering
+          ;; Output only DELTA text with chunk-based numbering
           (with-current-buffer target-buffer
             (cond
              ((derived-mode-p 'vterm-mode)
-              ;; VTerm: send numbered line directly
-              (whisper-live--insert-chunk-vterm whisper-live--chunk-id clean-text))
+              ;; VTerm: send numbered delta line
+              (whisper-live--insert-chunk-vterm whisper-live--chunk-id delta-text))
              ((derived-mode-p 'term-mode)
-              ;; Term: send numbered line directly
-              (whisper-live--insert-chunk-term whisper-live--chunk-id clean-text))
+              ;; Term: send numbered delta line
+              (whisper-live--insert-chunk-term whisper-live--chunk-id delta-text))
              (buffer-read-only
-              (message "Read-only buffer: [%03d] %s" whisper-live--chunk-id clean-text))
+              (message "Read-only buffer: [%03d] %s" whisper-live--chunk-id delta-text))
              (t
-              ;; Regular buffer: insert numbered line
-              (whisper-live--insert-chunk-buffer whisper-live--chunk-id clean-text))))
+              ;; Regular buffer: insert numbered delta line
+              (whisper-live--insert-chunk-buffer whisper-live--chunk-id delta-text))))
           (run-hooks 'whisper-live-transcribe-hook))))))
 
 (defun whisper-live--transcribe-chunk (concatenated-file)
