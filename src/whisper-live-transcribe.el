@@ -199,16 +199,12 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
   (let ((cmd (whisper-command concatenated-file))
         (temp-buffer (generate-new-buffer " *whisper-temp*"))
         (start-time (current-time)))
-    (message "[whisper-live] Transcribing: %s" concatenated-file)
-    (message "[whisper-live] Command: %S" cmd)
     (when (and cmd (car cmd))
       ;; Record start time
       (setq whisper-live--last-transcription-time start-time)
-      ;; Kill any existing transcription process first
+      ;; Kill any existing transcription process first (silently)
       (when (and whisper-live--current-transcription
                  (process-live-p whisper-live--current-transcription))
-        (message
-         "[whisper-live] WARNING: Killing existing transcription process!")
         (delete-process whisper-live--current-transcription))
       (setq whisper-live--current-transcription
             (make-process
@@ -218,9 +214,8 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
              :sentinel (lambda (process event)
                          (let
                              ((process-buffer (process-buffer process)))
-                           (message
-                            "[whisper-live] Process event: %s, status: %s"
-                            event (process-status process))
+                           ;; Update mode line when transcription finishes
+                           (force-mode-line-update t)
                            (when (string-equal "finished\n" event)
                              ;; Calculate transcription duration
                              (let*
