@@ -513,35 +513,75 @@ This may cause empty transcriptions. Use generic model (without .en) instead."
       (force-mode-line-update t)
       new-lang)))
 
-(defun whisper-live-switch-language (&optional cycle)
-  "Switch language for whisper transcription.
-With prefix argument CYCLE (or when called non-interactively with CYCLE=t),
-cycles through languages in `whisper-live-languages' list.
-Otherwise, offers interactive selection with completion from all supported languages."
-  (interactive "P")
-  (if cycle
-      ;; Cycle through predefined list
-      (let* ((current whisper-language)
-             (current-idx (cl-position current whisper-live-languages :test #'string=))
-             (next-idx (if current-idx
-                          (mod (1+ current-idx) (length whisper-live-languages))
-                        0))
-             (next-lang (nth next-idx whisper-live-languages)))
-        (setq whisper-language next-lang)
-        ;; Warn if using .en model with non-English language
-        (when (and (not (string-equal next-lang "en"))
-                   (not (string-equal next-lang "auto"))
-                   (string-suffix-p ".en" whisper-model))
-          (warn "[whisper-live] WARNING: Using .en model (%s) with %s language. \
+(defun whisper-live-cycle-language ()
+  "Quickly cycle through languages in `whisper-live-languages' list.
+This is the fast toggle function - no prompts, instant switching.
+Cycles: en → ja → auto (or your custom list)."
+  (interactive)
+  (let* ((current whisper-language)
+         (current-idx (cl-position current whisper-live-languages :test #'string=))
+         (next-idx (if current-idx
+                      (mod (1+ current-idx) (length whisper-live-languages))
+                    0))
+         (next-lang (nth next-idx whisper-live-languages)))
+    (setq whisper-language next-lang)
+    ;; Warn if using .en model with non-English language
+    (when (and (not (string-equal next-lang "en"))
+               (not (string-equal next-lang "auto"))
+               (string-suffix-p ".en" whisper-model))
+      (warn "[whisper-live] WARNING: Using .en model (%s) with %s language. \
 This may cause empty transcriptions. Use generic model (without .en) instead."
-                whisper-model next-lang))
-        (message "[whisper-live] Language switched: %s -> %s (model: %s%s)"
-                 current next-lang whisper-model
-                 (if whisper-quantize (concat "-" whisper-quantize) ""))
-        (force-mode-line-update t)
-        next-lang)
-    ;; Interactive selection with completion
-    (whisper-live-select-language)))
+            whisper-model next-lang))
+    (message "[whisper-live] Language: %s -> %s"
+             current next-lang)
+    (force-mode-line-update t)
+    next-lang))
+
+(defun whisper-live-switch-language (&optional use-completion)
+  "Switch language for whisper transcription.
+By default, quickly cycles through languages in `whisper-live-languages' list.
+With prefix argument USE-COMPLETION, offers interactive selection with completion
+from all 99 supported languages.
+
+Fast toggle (default): en → ja → auto
+Full selection (C-u): Choose from all languages with completion"
+  (interactive "P")
+  (if use-completion
+      ;; Interactive selection with completion
+      (whisper-live-select-language)
+    ;; Quick cycle through predefined list (FAST)
+    (whisper-live-cycle-language)))
+
+(defvar whisper-live--last-key-press-time nil
+  "Time of last key press for double-press detection.")
+
+(defvar whisper-live-double-press-timeout 0.3
+  "Timeout in seconds for detecting double-press (default: 0.3).
+If key is pressed twice within this time, cycle language instead of toggling recording.")
+
+(defun whisper-live-smart-toggle ()
+  "Smart toggle: single press starts/stops recording, double press cycles language.
+- Single press (or first press): Start/stop whisper-live recording
+- Double press within `whisper-live-double-press-timeout': Cycle language
+
+Bind this to a key like Alt-Enter for quick access."
+  (interactive)
+  (let ((current-time (float-time))
+        (last-time whisper-live--last-key-press-time))
+    (if (and last-time
+             (< (- current-time last-time) whisper-live-double-press-timeout))
+        ;; Double press detected - cycle language
+        (progn
+          (setq whisper-live--last-key-press-time nil)  ; Reset
+          (whisper-live-cycle-language))
+      ;; Single press - toggle recording
+      (setq whisper-live--last-key-press-time current-time)
+      (run-with-timer whisper-live-double-press-timeout nil
+                      (lambda ()
+                        (when (equal whisper-live--last-key-press-time current-time)
+                          ;; No second press came, execute toggle
+                          (whisper-live-run)
+                          (setq whisper-live--last-key-press-time nil)))))))
 
 (defvar whisper-live--initialized nil
   "Flag to track if whisper-live has been initialized.")
