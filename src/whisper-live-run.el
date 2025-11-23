@@ -21,11 +21,11 @@
   (if whisper-live--current-process
       (progn
         (whisper-live--cleanup)
-        (message "[whisper-live] Stopping, beep-on-start=%s"
-                 whisper-live-beep-on-start)
-        (when whisper-live-beep-on-start
-          (beep)
-          (message "[whisper-live] Beep on stop!"))
+        (message "[whisper-live] Stopping, beep-on-stop=%s"
+                 whisper-live-beep-on-stop)
+        (when whisper-live-beep-on-stop
+          (whisper-live--beep whisper-live-beep-stop-frequency 300 3)
+          (message "[whisper-live] Stop beep (3x low tone)!"))
         (message "Stopped"))
     ;; Always cleanup any existing processes before starting
     (when (or whisper-live--current-process
@@ -44,8 +44,8 @@
     (message "[whisper-live] Starting, beep-on-start=%s"
              whisper-live-beep-on-start)
     (when whisper-live-beep-on-start
-      (beep)
-      (message "[whisper-live] Beep on start!"))
+      (whisper-live--beep whisper-live-beep-start-frequency 200 1)
+      (message "[whisper-live] Start beep (1x high tone)!"))
     (message "Live transcription started")))
 
 
