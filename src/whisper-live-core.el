@@ -37,6 +37,24 @@
                     (file-name-directory (or load-file-name buffer-file-name)))
   "Path to WSL2 buzzer script for different frequency beeps.")
 
+(defvar whisper-live-beep-start-wav
+  (expand-file-name "start_beep.wav"
+                    (file-name-directory (or load-file-name buffer-file-name)))
+  "Path to WAV file for start beep.")
+
+(defvar whisper-live-beep-during-wav
+  (expand-file-name "during_beep.wav"
+                    (file-name-directory (or load-file-name buffer-file-name)))
+  "Path to WAV file for chunk/during beep.")
+
+(defvar whisper-live-beep-stop-wav
+  (expand-file-name "stop_beep.wav"
+                    (file-name-directory (or load-file-name buffer-file-name)))
+  "Path to WAV file for stop beep.")
+
+(defvar whisper-live-use-wav-beeps t
+  "Use WAV files for beeps instead of frequency-based beeps.")
+
 (defvar whisper-live-display-words 15
   "Number of words to display from each transcription chunk.
 Set to nil to display full text.")
@@ -125,27 +143,64 @@ If CANCELING is non-nil, set canceling flag to prevent insertions."
   (setq whisper-live--insert-marker nil
         whisper-live--insert-end-marker nil))
 
+(defun whisper-live--play-wav (wav-file)
+  "Play a WAV file using available audio player.
+WAV-FILE is the path to the WAV file to play."
+  (when (and wav-file (file-exists-p wav-file))
+    (cond
+     ;; Try aplay (ALSA player - common on Linux/WSL)
+     ((executable-find "aplay")
+      (start-process "whisper-live-beep" nil "aplay" "-q" wav-file))
+     ;; Try ffplay (from ffmpeg)
+     ((executable-find "ffplay")
+      (start-process "whisper-live-beep" nil "ffplay" "-nodisp" "-autoexit" "-loglevel" "quiet" wav-file))
+     ;; Try mpv
+     ((executable-find "mpv")
+      (start-process "whisper-live-beep" nil "mpv" "--no-video" "--really-quiet" wav-file))
+     ;; Try afplay (macOS)
+     ((executable-find "afplay")
+      (start-process "whisper-live-beep" nil "afplay" wav-file))
+     ;; Fallback to system beep
+     (t (beep)))))
+
 (defun whisper-live--beep (frequency &optional duration repeat-count)
-  "Play a beep at FREQUENCY Hz.
+  "Play a beep at FREQUENCY Hz or use WAV file if enabled.
+FREQUENCY determines which beep type: start (1000), chunk (750), or stop (500).
 DURATION is beep duration in milliseconds (default: 200).
 REPEAT-COUNT is number of times to beep (default: 1).
-Uses wsl2-buzzer.sh if available, otherwise falls back to system beep."
-  (let ((dur (or duration 200))
-        (repeats (or repeat-count 1)))
-    (if (and (file-exists-p whisper-live-buzzer-script)
-             (file-executable-p whisper-live-buzzer-script))
-        ;; Use wsl2-buzzer.sh for frequency control
-        (start-process "whisper-live-beep" nil
-                      whisper-live-buzzer-script
-                      "-f" (number-to-string frequency)
-                      "-d" (number-to-string dur)
-                      "-r" (number-to-string repeats)
-                      "-i" "0.1")
-      ;; Fallback to system beep
-      (dotimes (_ repeats)
-        (beep)
-        (when (> repeats 1)
-          (sit-for 0.1))))))
+If `whisper-live-use-wav-beeps' is t, plays corresponding WAV file.
+Otherwise uses wsl2-buzzer.sh if available, or falls back to system beep."
+  (if whisper-live-use-wav-beeps
+      ;; Use WAV files based on frequency
+      (let ((wav-file
+             (cond
+              ((= frequency whisper-live-beep-start-frequency)
+               whisper-live-beep-start-wav)
+              ((= frequency whisper-live-beep-chunk-frequency)
+               whisper-live-beep-during-wav)
+              ((= frequency whisper-live-beep-stop-frequency)
+               whisper-live-beep-stop-wav)
+              (t nil))))
+        (if wav-file
+            (whisper-live--play-wav wav-file)
+          (beep)))
+    ;; Use frequency-based beeps
+    (let ((dur (or duration 200))
+          (repeats (or repeat-count 1)))
+      (if (and (file-exists-p whisper-live-buzzer-script)
+               (file-executable-p whisper-live-buzzer-script))
+          ;; Use wsl2-buzzer.sh for frequency control
+          (start-process "whisper-live-beep" nil
+                        whisper-live-buzzer-script
+                        "-f" (number-to-string frequency)
+                        "-d" (number-to-string dur)
+                        "-r" (number-to-string repeats)
+                        "-i" "0.1")
+        ;; Fallback to system beep
+        (dotimes (_ repeats)
+          (beep)
+          (when (> repeats 1)
+            (sit-for 0.1)))))))
 
 (defvar whisper-live--initialized nil
   "Flag to track if whisper-live has been initialized.")
