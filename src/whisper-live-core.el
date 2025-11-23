@@ -20,6 +20,23 @@
 (defvar whisper-live-beep-on-chunk t
   "Beep when each chunk is recorded.")
 
+(defvar whisper-live-beep-on-stop t
+  "Beep when recording stops.")
+
+(defvar whisper-live-beep-start-frequency 1000
+  "Frequency in Hz for start beep (higher = more distinct).")
+
+(defvar whisper-live-beep-chunk-frequency 750
+  "Frequency in Hz for chunk beep (middle tone).")
+
+(defvar whisper-live-beep-stop-frequency 500
+  "Frequency in Hz for stop beep (lower = ending tone).")
+
+(defvar whisper-live-buzzer-script
+  (expand-file-name "../docs/to_claude/bin/general/wsl2-buzzer.sh"
+                    (file-name-directory (or load-file-name buffer-file-name)))
+  "Path to WSL2 buzzer script for different frequency beeps.")
+
 (defvar whisper-live-display-words 15
   "Number of words to display from each transcription chunk.
 Set to nil to display full text.")
@@ -107,6 +124,28 @@ If CANCELING is non-nil, set canceling flag to prevent insertions."
     (set-marker whisper-live--insert-end-marker nil))
   (setq whisper-live--insert-marker nil
         whisper-live--insert-end-marker nil))
+
+(defun whisper-live--beep (frequency &optional duration repeat-count)
+  "Play a beep at FREQUENCY Hz.
+DURATION is beep duration in milliseconds (default: 200).
+REPEAT-COUNT is number of times to beep (default: 1).
+Uses wsl2-buzzer.sh if available, otherwise falls back to system beep."
+  (let ((dur (or duration 200))
+        (repeats (or repeat-count 1)))
+    (if (and (file-exists-p whisper-live-buzzer-script)
+             (file-executable-p whisper-live-buzzer-script))
+        ;; Use wsl2-buzzer.sh for frequency control
+        (start-process "whisper-live-beep" nil
+                      whisper-live-buzzer-script
+                      "-f" (number-to-string frequency)
+                      "-d" (number-to-string dur)
+                      "-r" (number-to-string repeats)
+                      "-i" "0.1")
+      ;; Fallback to system beep
+      (dotimes (_ repeats)
+        (beep)
+        (when (> repeats 1)
+          (sit-for 0.1))))))
 
 (defvar whisper-live--initialized nil
   "Flag to track if whisper-live has been initialized.")

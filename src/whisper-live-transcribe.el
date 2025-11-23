@@ -234,8 +234,8 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
                           "[whisper-live] Chunk recorded, beep-on-chunk=%s"
                           whisper-live-beep-on-chunk)
                          (when whisper-live-beep-on-chunk
-                           (beep)
-                           (message "[whisper-live] Beep!"))
+                           (whisper-live--beep whisper-live-beep-chunk-frequency 200 2)
+                           (message "[whisper-live] Chunk beep (2x mid tone)!"))
                          ;; Transcribe concatenated chunks for better context
                          (let ((combined-file
                                 (whisper-live--concatenate-chunks
