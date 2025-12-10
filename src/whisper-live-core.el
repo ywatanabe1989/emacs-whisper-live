@@ -11,7 +11,7 @@
 (defvar whisper-live--transcription-text ""
   "Current transcription text.")
 
-(defvar whisper-live-chunk-duration 5
+(defvar whisper-live-chunk-duration 3
   "Duration of each audio chunk in seconds.")
 
 (defvar whisper-live-beep-on-start t

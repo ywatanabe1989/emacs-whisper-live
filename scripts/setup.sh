@@ -174,7 +174,7 @@ print_config_instructions() {
 
   ;; Audio Recording Settings
   ;; For WSL/RDP: (setq whisper--ffmpeg-input-device "RDPSource")
-  (setq whisper-live-chunk-duration 3
+  (setq whisper-live-chunk-duration 5
         whisper-live-number-chunks t
         whisper-live-chunk-format "[%d] %s\n")
   :bind
