@@ -9,10 +9,10 @@
 ;;; whisper-live.el --- Real-time speech transcription with Whisper -*- lexical-binding: t; -*-
 
 ;; Author: Yusuke Watanabe <ywatanabe@scitex.ai>
-;; Version: 1.0.0
+;; Version: 1.2.0
 ;; Package-Requires: ((emacs "27.1"))
 ;; Keywords: multimedia, speech, transcription
-;; URL: https://github.com/ywatanabe1989/whisper-live
+;; URL: https://github.com/ywatanabe1989/emacs-whisper-live
 
 ;; Copyright (C) 2025 Yusuke Watanabe
 
