@@ -11,7 +11,7 @@
 (defvar whisper-live--transcription-text ""
   "Current transcription text.")
 
-(defvar whisper-live-chunk-duration 3
+(defvar whisper-live-chunk-duration 10
   "Duration of each audio chunk in seconds.")
 
 (defvar whisper-live-beep-on-start t
@@ -106,6 +106,36 @@ Set to nil to disable hard stop.")
 (defvar whisper-live--max-chunks 6
   "Maximum number of transcription chunks to keep in history.
 Reduced to 6 (~30 seconds of audio) to prevent whisper timeout on long audio files.")
+
+(defvar whisper-live-independent-chunks t
+  "When non-nil (default), transcribe each chunk independently without concatenation.
+When nil, chunks are concatenated for better context.")
+
+;; Volume threshold configuration
+(defvar whisper-live-volume-threshold -35
+  "Minimum mean volume in dB to process a chunk.
+Chunks quieter than this are skipped as silence/noise.
+Default -35 dB. Set to -50 for more sensitivity, -25 for less.")
+
+(defvar whisper-live-skip-quiet-chunks t
+  "When non-nil, skip chunks below `whisper-live-volume-threshold'.")
+
+;; Voice command configuration
+(defvar whisper-live-voice-commands-enabled t
+  "Enable voice command recognition during transcription.")
+
+(defvar whisper-live-voice-commands
+  '(("speech completed" . whisper-live-stop-and-send)
+    ("completed speech" . whisper-live-stop-and-send)
+    ("speech complete" . whisper-live-stop-and-send)
+    ("complete speech" . whisper-live-stop-and-send)
+    ("speech end" . whisper-live-stop)
+    ("speech switch" . whisper-live-cycle-language)
+    ("speech cancel" . whisper-live-cancel)
+    ("speech clear" . whisper-live-cancel))
+  "Alist of voice commands and their corresponding functions.
+Commands use 'speech' keyword to be distinctive from normal conversation.
+'speech completed' or 'completed speech' stops and sends Enter in vterm.")
 
 (defvar whisper-live-transcribe-hook nil
   "Hook run after each transcription.")

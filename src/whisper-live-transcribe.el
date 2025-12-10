@@ -8,6 +8,7 @@
 
 ;;; Time-stamp: <2024-12-08 19:17:19 (ywatanabe)>
 
+(require 'cl-lib)
 (require 'whisper-live-core)
 (require 'whisper-live-audio)
 (require 'whisper-live-vterm)
@@ -159,15 +160,39 @@ If NUM-WORDS is nil and `whisper-live-display-words` is nil, returns full text."
         ;; No limit - return full text
         trimmed))))
 
+(defun whisper-live--check-voice-command (text)
+  "Check if TEXT contains a voice command and execute it.
+Returns the command function if found, nil otherwise.
+Voice commands are only recognized in properly transcribed text.
+The text is the raw transcription output before chunk ID is added."
+  (when (and whisper-live-voice-commands-enabled
+             text
+             (not (string-empty-p (string-trim text)))
+             ;; Only process if it looks like valid speech (has some letters)
+             (string-match-p "[a-zA-Z]" text))
+    (let ((lower-text (downcase (string-trim text))))
+      (cl-loop for (cmd . func) in whisper-live-voice-commands
+               ;; Match command phrase (case-insensitive)
+               when (string-match-p (regexp-quote cmd) lower-text)
+               do (progn
+                    (message "[whisper-live] Voice command detected: '%s' in chunk #%d"
+                             cmd (1+ whisper-live--chunk-id))
+                    ;; Execute command after a short delay to finish current processing
+                    (run-with-timer 0.1 nil func)
+                    (cl-return func))))))
+
 (defun whisper-live--handle-transcription (text)
   "Handle transcription TEXT by inserting into buffer.
-Stores chunk data and outputs only last N words (controlled by `whisper-live-display-words`)."
-  (when (and text
-             (not whisper-live--canceling)  ; Skip if canceling
-             (not (string-empty-p (string-trim text)))
-             (not (string-match-p "^[[:space:].,]*$" text))
-             (markerp whisper-live--insert-marker)
-             (markerp whisper-live--insert-end-marker))
+Stores chunk data and outputs only last N words (controlled by `whisper-live-display-words`).
+Also checks for voice commands."
+  ;; Check for voice commands first - if detected, skip inserting command text
+  (unless (whisper-live--check-voice-command text)
+    (when (and text
+               (not whisper-live--canceling)  ; Skip if canceling
+               (not (string-empty-p (string-trim text)))
+               (not (string-match-p "^[[:space:].,]*$" text))
+               (markerp whisper-live--insert-marker)
+               (markerp whisper-live--insert-end-marker))
     ;; Update activity time for auto-stop tracking
     (whisper-live--update-activity-time)
     (setq whisper-live--transcription-text
@@ -203,7 +228,7 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
              (t
               ;; Regular buffer: insert numbered text
               (whisper-live--insert-chunk-buffer whisper-live--chunk-id display-text))))
-          (run-hooks 'whisper-live-transcribe-hook))))))
+          (run-hooks 'whisper-live-transcribe-hook)))))))  ; close unless
 
 (defun whisper-live--transcribe-chunk (concatenated-file)
   "Transcribe a single CONCATENATED-FILE."
@@ -299,16 +324,25 @@ Stores chunk data and outputs only last N words (controlled by `whisper-live-dis
                       "-y" ,chunk-file)
            :sentinel (lambda (_process event)
                        (when (string-equal "finished\n" event)
-                         ;; Beep without verbose messages
-                         (when whisper-live-beep-on-chunk
-                           (whisper-live--beep whisper-live-beep-chunk-frequency 200 2))
-                         ;; Transcribe concatenated chunks for better context
-                         (let ((combined-file
-                                (whisper-live--concatenate-chunks
-                                 whisper-live--chunks-directory)))
-                           (push combined-file
-                                 whisper-live--transcription-queue)
-                           (whisper-live--process-transcription-queue))))))))
+                         ;; Check volume threshold before processing
+                         (if (whisper-live--chunk-has-speech-p chunk-file)
+                             (progn
+                               ;; Beep without verbose messages
+                               (when whisper-live-beep-on-chunk
+                                 (whisper-live--beep whisper-live-beep-chunk-frequency 200 2))
+                               ;; Choose transcription mode based on setting
+                               (let ((file-to-transcribe
+                                      (if whisper-live-independent-chunks
+                                          ;; Independent mode: transcribe single chunk
+                                          chunk-file
+                                        ;; Concatenated mode: combine chunks for context
+                                        (whisper-live--concatenate-chunks
+                                         whisper-live--chunks-directory))))
+                                 (push file-to-transcribe
+                                       whisper-live--transcription-queue)
+                                 (whisper-live--process-transcription-queue)))
+                           ;; Volume too low - skip transcription, start next recording
+                           (whisper-live--record-chunk))))))))
 
 
 (provide 'whisper-live-transcribe)

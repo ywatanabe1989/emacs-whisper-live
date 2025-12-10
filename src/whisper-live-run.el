@@ -15,16 +15,49 @@
 
 ;;;###autoload
 
+(defun whisper-live-stop ()
+  "Stop live transcription (voice command: 'speech end')."
+  (interactive)
+  (when whisper-live--current-process
+    (whisper-live--cleanup)
+    (when whisper-live-beep-on-stop
+      (whisper-live--beep whisper-live-beep-stop-frequency 300 1))
+    (message "[whisper-live] Stopped")))
+
+(defun whisper-live-stop-and-send ()
+  "Stop transcription and send Enter in vterm to submit to AI.
+Voice command: 'speech completed' or 'completed speech'."
+  (interactive)
+  (let ((target-buffer whisper-live--target-buffer))
+    ;; Stop transcription first
+    (whisper-live-stop)
+    ;; Then send Enter in vterm if target was vterm
+    (when (and target-buffer (buffer-live-p target-buffer))
+      (with-current-buffer target-buffer
+        (when (derived-mode-p 'vterm-mode)
+          ;; Small delay to ensure transcription text is fully inserted
+          (run-with-timer 0.2 nil
+                          (lambda ()
+                            (when (buffer-live-p target-buffer)
+                              (with-current-buffer target-buffer
+                                (vterm-send-return)
+                                (message "[whisper-live] Sent to AI"))))))))))
+
+(defun whisper-live-cancel ()
+  "Cancel current transcription and clear pending text (voice command: 'clear whisper')."
+  (interactive)
+  (when whisper-live--current-process
+    (whisper-live--cleanup t)  ; t = canceling, skips final insertions
+    (when whisper-live-beep-on-stop
+      (whisper-live--beep whisper-live-beep-stop-frequency 300 2))
+    (message "[whisper-live] Cancelled")))
+
 (defun whisper-live-run ()
   "Toggle live transcription."
   (interactive)
   (if whisper-live--current-process
       (progn
-        (whisper-live--cleanup)
-        ;; Play stop beep without verbose messages
-        (when whisper-live-beep-on-stop
-          (whisper-live--beep whisper-live-beep-stop-frequency 300 1))
-        (message "Transcription stopped"))
+        (whisper-live-stop))
     ;; Always cleanup any existing processes before starting
     (when (or whisper-live--current-process
               whisper-live--current-transcription

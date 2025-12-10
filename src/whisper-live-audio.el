@@ -32,6 +32,37 @@
           whisper-live--chunks-directory
           (format-time-string "%Y%m%d-%H%M%S")))
 
+(defun whisper-live--get-audio-volume (audio-file)
+  "Get mean volume of AUDIO-FILE in dB using ffmpeg.
+Returns the mean volume as a number, or nil if detection fails."
+  (when (and audio-file (file-exists-p audio-file))
+    (let ((output (with-temp-buffer
+                    (call-process "ffmpeg" nil t nil
+                                  "-i" audio-file
+                                  "-af" "volumedetect"
+                                  "-f" "null" "-"
+                                  "-hide_banner")
+                    (buffer-string))))
+      ;; Parse mean_volume from ffmpeg output
+      ;; Example: [Parsed_volumedetect_0 @ ...] mean_volume: -25.3 dB
+      (when (string-match "mean_volume: \\(-?[0-9.]+\\) dB" output)
+        (string-to-number (match-string 1 output))))))
+
+(defun whisper-live--chunk-has-speech-p (audio-file)
+  "Check if AUDIO-FILE has speech (volume above threshold).
+Returns t if volume is above `whisper-live-volume-threshold', nil otherwise."
+  (if (not whisper-live-skip-quiet-chunks)
+      t  ; Always process if threshold check disabled
+    (let ((volume (whisper-live--get-audio-volume audio-file)))
+      (if volume
+          (let ((has-speech (>= volume whisper-live-volume-threshold)))
+            (unless has-speech
+              (message "[whisper-live] Skipping quiet chunk (%.1f dB < %.1f dB threshold)"
+                       volume whisper-live-volume-threshold))
+            has-speech)
+        ;; If volume detection fails, process anyway
+        t))))
+
 (defun whisper-live--concatenate-chunks (chunk-directory)
   "Concatenate recent wav chunks in CHUNK-DIRECTORY into single file."
   (let* ((output-file (concat chunk-directory "combined.wav"))
