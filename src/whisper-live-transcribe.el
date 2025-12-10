@@ -46,15 +46,20 @@
             (replace-regexp-in-string
              "\\[BLANK_AUDIO\\]\\|\\[_BEG_\\]\\|\\[_TT_[0-9]+\\]" ""
              cleaned))
-      ;; Remove parenthetical noise markers like (background noise), (lips smacking)
+      ;; Remove ALL [UPPERCASE TEXT] markers like [MUSIC PLAYING], [APPLAUSE], etc.
       (setq cleaned
             (replace-regexp-in-string
-             "(\\(?:lips smacking\\|background noise\\|inaudible\\|coughing\\|breathing\\|music\\|whimpering\\)[^)]*)" ""
+             "\\[[A-Z][A-Z ]+\\]" ""
              cleaned))
-      ;; Remove any remaining parenthetical sound descriptions
+      ;; Remove ALL parenthetical noise/sound descriptions like (clears throat), (phone beeps)
       (setq cleaned
             (replace-regexp-in-string
-             "(\\s-*)" ""  ;; Empty parentheses
+             "([^)]*\\(?:clears\\|cough\\|sneez\\|sigh\\|laugh\\|cry\\|scream\\|whisper\\|mutter\\|grunt\\|groan\\|moan\\|yawn\\|sniff\\|breathing\\|noise\\|sound\\|beep\\|ring\\|buzz\\|click\\|bang\\|thud\\|crash\\|music\\|singing\\|humming\\|whistling\\|applause\\|cheering\\|silence\\|pause\\|inaudible\\|indistinct\\|unintelligible\\|foreign\\|speaking\\)[^)]*)" ""
+             cleaned t))  ; case-insensitive
+      ;; Remove any remaining short parenthetical markers (likely noise descriptions)
+      (setq cleaned
+            (replace-regexp-in-string
+             "([^)]{0,30})" ""  ; Remove short parenthetical content (likely noise)
              cleaned))
       ;; Remove line-start whisper messages
       (setq cleaned
@@ -64,48 +69,26 @@
       (string-trim cleaned))))
 
 (defun whisper-live--extract-text-from-output (buffer)
-  "Extract transcribed text from whisper output BUFFER."
+  "Extract transcribed text from whisper output BUFFER.
+Whisper outputs transcription to stdout and everything else to stderr.
+When using :buffer without :stderr, we only get stdout which is the transcription."
   (with-current-buffer buffer
-    (let ((output (buffer-string)))
-      ;; Try multiple patterns to extract text
-      (cond
-       ;; Pattern 0: Text after language detection (best for Japanese)
-       ((string-match "auto-detected language:.*?\\([a-z]+\\).*?\n\n\\([^\n]*\\)" output)
-        (let ((text (match-string 2 output)))
-          ;; Remove any trailing whisper_ messages
-          (when (string-match "\\(.*?\\)\\(?:whisper_\\|$\\)" text)
-            (string-trim (match-string 1 text)))))
-       ;; Pattern 1: Standard "\n\n TEXT\n\n" format (skip system lines)
-       ((string-match "\n\n[ \t]*\\(.+\\)[ \t]*\n\n" output)
-        (let ((text (match-string 1 output)))
-          ;; Skip if it's a system_info or main: line
-          (if (or (string-match-p "^system_info:" text)
-                  (string-match-p "^main:" text)
-                  (string-match-p " = .* | " text))
-              ;; Try to find actual transcription after system lines
-              (when (string-match "main:.*\n+\\(.+\\)" output)
-                (match-string 1 output))
-            text)))
-       ;; Pattern 2: Text after all model loading messages (more flexible)
-       ((string-match "whisper_model_load:.*\n+\\(.+\\)" output)
-        (let ((text (match-string 1 output)))
-          ;; Clean up: take everything until next whisper_ line or end
-          (when (string-match "\\(.*?\\)\\(?:\nwhisper_\\|$\\)" text)
-            (string-trim (match-string 1 text)))))
-       ;; Pattern 3: Any text after the model info, before process ends
-       ((string-match "whisper_full_.*\n+\\([^\n]+\\)" output)
-        (match-string 1 output))
-       ;; Pattern 4: Last substantial line that's not a system/whisper message
-       (t
-        (let ((lines (split-string output "\n" t)))
-          (cl-loop for line in (reverse lines)
-                   when (and (not (string-match-p "^whisper_" line))
-                             (not (string-match-p "^main:" line))
-                             (not (string-match-p "^system_info:" line))
-                             ;; Skip lines with system info pattern (contains = and |)
-                             (not (string-match-p " = .* | " line))
-                             (> (length (string-trim line)) 0))
-                   return (string-trim line))))))))
+    (let ((output (string-trim (buffer-string))))
+      ;; Debug: show what we got from stdout
+      (message "[whisper-live] stdout buffer: '%s'" output)
+      ;; If we captured only stdout, the output should be just the transcription
+      ;; Just filter out any remaining system lines that might have leaked through
+      (if (and (> (length output) 0)
+               (not (string-match-p "^whisper_" output))
+               (not (string-match-p "^main:" output))
+               (not (string-match-p "^system_info:" output))
+               (not (string-match-p " = [0-9.]+ |" output))
+               (not (string-match-p "time\\s-*=" output)))
+          (progn
+            (message "[whisper-live] Extracted: '%s'" output)
+            output)
+        (message "[whisper-live] Filtered out or empty: '%s'" output)
+        nil))))
 
 (defun whisper-live--insert-chunk-vterm (chunk-id clean-text)
   "Insert CLEAN-TEXT into vterm buffer with CHUNK-ID."
@@ -242,29 +225,32 @@ Also checks for voice commands."
       (when (and whisper-live--current-transcription
                  (process-live-p whisper-live--current-transcription))
         (delete-process whisper-live--current-transcription))
-      (setq whisper-live--current-transcription
-            (make-process
-             :name "whisper-live-transcribing"
-             :command cmd
-             :buffer temp-buffer
-             :sentinel (lambda (process event)
-                         (let
-                             ((process-buffer (process-buffer process)))
-                           ;; Update mode line when transcription finishes
-                           (force-mode-line-update t)
-                           (when (string-equal "finished\n" event)
-                             ;; Calculate transcription duration
-                             (let*
-                                 ((duration
-                                   (float-time
-                                    (time-subtract (current-time)
-                                                   start-time)))
-                                  (text
-                                   (whisper-live--extract-text-from-output
-                                    process-buffer))
-                                  (raw-output
-                                   (with-current-buffer process-buffer
-                                     (buffer-string))))
+      ;; Create/get debug buffer for raw output
+      (let ((debug-buffer (get-buffer-create "*whisper-live-debug*")))
+        (setq whisper-live--current-transcription
+              (make-process
+               :name "whisper-live-transcribing"
+               :command cmd
+               :buffer temp-buffer
+               :stderr debug-buffer  ; Capture stderr to debug buffer
+               :sentinel (lambda (process event)
+                           (let
+                               ((process-buffer (process-buffer process)))
+                             ;; Update mode line when transcription finishes
+                             (force-mode-line-update t)
+                             (when (string-equal "finished\n" event)
+                               ;; Calculate transcription duration
+                               (let*
+                                   ((duration
+                                     (float-time
+                                      (time-subtract (current-time)
+                                                     start-time)))
+                                    (text
+                                     (whisper-live--extract-text-from-output
+                                      process-buffer))
+                                    (raw-output
+                                     (with-current-buffer process-buffer
+                                       (buffer-string))))
                                (setq
                                 whisper-live--transcription-duration
                                 duration)
@@ -307,7 +293,7 @@ Also checks for voice commands."
                                  (not
                                   whisper-live--transcription-queue)
                                (whisper-live--record-chunk))
-                             (kill-buffer process-buffer)))))))))
+                             (kill-buffer process-buffer))))))))))  ; extra paren for debug-buffer let
 
 (defun whisper-live--record-chunk ()
   "Record a single audio chunk."
