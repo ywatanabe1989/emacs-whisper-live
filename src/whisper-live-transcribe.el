@@ -5,7 +5,6 @@
 
 ;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@scitex.ai)
 
-
 ;;; Time-stamp: <2024-12-08 19:17:19 (ywatanabe)>
 
 (require 'cl-lib)
@@ -34,32 +33,18 @@
       ;; Remove whisper progress messages (can appear inline with text)
       (setq cleaned
             (replace-regexp-in-string
-             "whisper_print_progress_callback: progress = +[0-9]+%?" ""
+             "whisper_print_progress_callback: progress = +[0-9]+%?"
+	     ""
              cleaned))
       ;; Remove any whisper_ system messages that might be inline
       (setq cleaned
             (replace-regexp-in-string
              "whisper_[a-z_]+:" ""
              cleaned))
-      ;; Remove [BLANK_AUDIO] and similar markers (but keep Japanese brackets like 「」)
+      ;; Remove ALL bracketed content: [...], (...), {...}, <...>
       (setq cleaned
             (replace-regexp-in-string
-             "\\[BLANK_AUDIO\\]\\|\\[_BEG_\\]\\|\\[_TT_[0-9]+\\]" ""
-             cleaned))
-      ;; Remove ALL [UPPERCASE TEXT] markers like [MUSIC PLAYING], [APPLAUSE], etc.
-      (setq cleaned
-            (replace-regexp-in-string
-             "\\[[A-Z][A-Z ]+\\]" ""
-             cleaned))
-      ;; Remove ALL parenthetical noise/sound descriptions like (clears throat), (phone beeps)
-      (setq cleaned
-            (replace-regexp-in-string
-             "([^)]*\\(?:clears\\|cough\\|sneez\\|sigh\\|laugh\\|cry\\|scream\\|whisper\\|mutter\\|grunt\\|groan\\|moan\\|yawn\\|sniff\\|breathing\\|noise\\|sound\\|beep\\|ring\\|buzz\\|click\\|bang\\|thud\\|crash\\|music\\|singing\\|humming\\|whistling\\|applause\\|cheering\\|silence\\|pause\\|inaudible\\|indistinct\\|unintelligible\\|foreign\\|speaking\\)[^)]*)" ""
-             cleaned t))  ; case-insensitive
-      ;; Remove any remaining short parenthetical markers (likely noise descriptions)
-      (setq cleaned
-            (replace-regexp-in-string
-             "([^)]{0,30})" ""  ; Remove short parenthetical content (likely noise)
+             "\\[[^]]*\\]\\|([^)]*)\\|{[^}]*}\\|<[^>]*>" ""
              cleaned))
       ;; Remove line-start whisper messages
       (setq cleaned
@@ -75,7 +60,7 @@ When using :buffer without :stderr, we only get stdout which is the transcriptio
   (with-current-buffer buffer
     (let ((output (string-trim (buffer-string))))
       ;; Debug: show what we got from stdout
-      (message "[whisper-live] stdout buffer: '%s'" output)
+      (whisper-live-debug-message "stdout buffer: '%s'" output)
       ;; If we captured only stdout, the output should be just the transcription
       ;; Just filter out any remaining system lines that might have leaked through
       (if (and (> (length output) 0)
@@ -85,10 +70,18 @@ When using :buffer without :stderr, we only get stdout which is the transcriptio
                (not (string-match-p " = [0-9.]+ |" output))
                (not (string-match-p "time\\s-*=" output)))
           (progn
-            (message "[whisper-live] Extracted: '%s'" output)
+            (whisper-live-debug-message "Extracted: '%s'" output)
             output)
-        (message "[whisper-live] Filtered out or empty: '%s'" output)
+        (whisper-live-debug-message "Filtered out or empty: '%s'"
+				    output)
         nil))))
+
+(defun whisper-live--maybe-insert-prefix ()
+  "Insert prefix message if enabled and not yet inserted in this session."
+  (when (and whisper-live-insert-prefix
+             (not whisper-live--prefix-inserted))
+    (setq whisper-live--prefix-inserted t)
+    whisper-live-prefix-message))
 
 (defun whisper-live--insert-chunk-vterm (chunk-id clean-text)
   "Insert CLEAN-TEXT into vterm buffer with CHUNK-ID."
@@ -97,6 +90,9 @@ When using :buffer without :stderr, we only get stdout which is the transcriptio
     (when (and (not (string-empty-p clean-text))
                (not (string-empty-p (string-trim clean-text)))
                (not (string-match-p "^[[:space:].,!?;:]*$" clean-text)))
+      ;; Insert prefix if this is the first transcription
+      (when-let ((prefix (whisper-live--maybe-insert-prefix)))
+        (vterm-send-string prefix))
       ;; Send numbered text with [001] format
       (vterm-send-string
        (format "[%03d] %s\n" chunk-id clean-text)))))
@@ -107,6 +103,9 @@ When using :buffer without :stderr, we only get stdout which is the transcriptio
   (when (and (not (string-empty-p clean-text))
              (not (string-empty-p (string-trim clean-text)))
              (not (string-match-p "^[[:space:].,!?;:]*$" clean-text)))
+    ;; Insert prefix if this is the first transcription
+    (when-let ((prefix (whisper-live--maybe-insert-prefix)))
+      (term-send-string (get-buffer-process (current-buffer)) prefix))
     ;; Send numbered text with [001] format
     (term-send-string (get-buffer-process (current-buffer))
                       (format "[%03d] %s\n" chunk-id clean-text))))
@@ -116,9 +115,13 @@ When using :buffer without :stderr, we only get stdout which is the transcriptio
   (when (and (not (string-empty-p clean-text))
              (not (string-empty-p (string-trim clean-text)))
              (not (string-match-p "^[[:space:].,!?;:]*$" clean-text)))
-    (let ((inhibit-read-only t))
+    (let ((inhibit-read-only t)
+          (prefix (whisper-live--maybe-insert-prefix)))
       ;; Go to end marker and insert numbered text with [001] format
       (goto-char whisper-live--insert-end-marker)
+      ;; Insert prefix if this is the first transcription
+      (when prefix
+        (insert prefix))
       (when whisper-live-clean-with-llm
         (insert whisper-live-start-tag))
       (insert (format "[%03d] %s\n" chunk-id clean-text))
@@ -158,8 +161,9 @@ The text is the raw transcription output before chunk ID is added."
                ;; Match command phrase (case-insensitive)
                when (string-match-p (regexp-quote cmd) lower-text)
                do (progn
-                    (message "[whisper-live] Voice command detected: '%s' in chunk #%d"
-                             cmd (1+ whisper-live--chunk-id))
+                    (whisper-live-debug-message
+		     "Voice command detected: '%s' in chunk #%d"
+                     cmd (1+ whisper-live--chunk-id))
                     ;; Execute command after a short delay to finish current processing
                     (run-with-timer 0.1 nil func)
                     (cl-return func))))))
@@ -176,43 +180,51 @@ Also checks for voice commands."
                (not (string-match-p "^[[:space:].,]*$" text))
                (markerp whisper-live--insert-marker)
                (markerp whisper-live--insert-end-marker))
-    ;; Update activity time for auto-stop tracking
-    (whisper-live--update-activity-time)
-    (setq whisper-live--transcription-text
-          (whisper-live--clean-transcript text))
-    (let* ((target-buffer (marker-buffer whisper-live--insert-marker))
+      ;; Update activity time for auto-stop tracking
+      (whisper-live--update-activity-time)
+      (setq whisper-live--transcription-text
+            (whisper-live--clean-transcript text))
+      (let*
+	  ((target-buffer (marker-buffer whisper-live--insert-marker))
            (clean-text
             (whisper--live-remove-tags
              whisper-live--transcription-text))
            ;; Extract only last N words for display
-           (display-text (whisper-live--extract-last-words clean-text)))
-      (when (and (buffer-live-p target-buffer)
-                 (not (string-empty-p clean-text))
-                 (not (string-empty-p display-text)))
-        ;; Increment chunk ID and store chunk data
-        (setq whisper-live--chunk-id (1+ whisper-live--chunk-id))
-        (let ((chunk-entry (list :id whisper-live--chunk-id
-                                 :raw text
-                                 :text clean-text         ;; Store full text
-                                 :display display-text    ;; Store displayed portion
-                                 :time (current-time))))
-          (push chunk-entry whisper-live--chunks)
-          ;; Output only LAST N WORDS with chunk-based numbering
-          (with-current-buffer target-buffer
-            (cond
-             ((derived-mode-p 'vterm-mode)
-              ;; VTerm: send numbered text
-              (whisper-live--insert-chunk-vterm whisper-live--chunk-id display-text))
-             ((derived-mode-p 'term-mode)
-              ;; Term: send numbered text
-              (whisper-live--insert-chunk-term whisper-live--chunk-id display-text))
-             (buffer-read-only
-              (message "Read-only buffer: [%03d] %s" whisper-live--chunk-id display-text))
-             (t
-              ;; Regular buffer: insert numbered text
-              (whisper-live--insert-chunk-buffer whisper-live--chunk-id display-text))))
-          (run-hooks 'whisper-live-transcribe-hook)))))))  ; close unless
-
+           (display-text
+	    (whisper-live--extract-last-words clean-text)))
+	(when (and (buffer-live-p target-buffer)
+                   (not (string-empty-p clean-text))
+                   (not (string-empty-p display-text)))
+          ;; Increment chunk ID and store chunk data
+          (setq whisper-live--chunk-id (1+ whisper-live--chunk-id))
+          (let ((chunk-entry (list :id whisper-live--chunk-id
+                                   :raw text
+                                   :text clean-text         ;; Store full text
+                                   :display display-text    ;; Store displayed portion
+                                   :time (current-time))))
+            (push chunk-entry whisper-live--chunks)
+            ;; Output only LAST N WORDS with chunk-based numbering
+            (with-current-buffer target-buffer
+              (cond
+               ((derived-mode-p 'vterm-mode)
+		;; VTerm: send numbered text
+		(whisper-live--insert-chunk-vterm
+		 whisper-live--chunk-id
+		 display-text))
+               ((derived-mode-p 'term-mode)
+		;; Term: send numbered text
+		(whisper-live--insert-chunk-term
+		 whisper-live--chunk-id
+		 display-text))
+               (buffer-read-only
+		(message "Read-only buffer: [%03d] %s"
+			 whisper-live--chunk-id display-text))
+               (t
+		;; Regular buffer: insert numbered text
+		(whisper-live--insert-chunk-buffer
+		 whisper-live--chunk-id display-text))))
+            (run-hooks 'whisper-live-transcribe-hook)))))))
+					; close unless
 (defun whisper-live--transcribe-chunk (concatenated-file)
   "Transcribe a single CONCATENATED-FILE."
   (let ((cmd (whisper-command concatenated-file))
@@ -235,7 +247,8 @@ Also checks for voice commands."
                :stderr debug-buffer  ; Capture stderr to debug buffer
                :sentinel (lambda (process event)
                            (let
-                               ((process-buffer (process-buffer process)))
+                               ((process-buffer
+				 (process-buffer process)))
                              ;; Update mode line when transcription finishes
                              (force-mode-line-update t)
                              (when (string-equal "finished\n" event)
@@ -249,52 +262,60 @@ Also checks for voice commands."
                                      (whisper-live--extract-text-from-output
                                       process-buffer))
                                     (raw-output
-                                     (with-current-buffer process-buffer
+                                     (with-current-buffer
+					 process-buffer
                                        (buffer-string))))
+				 (setq
+                                  whisper-live--transcription-duration
+                                  duration)
+				 ;; Debug: show raw output only when text is empty
+				 (when
+                                     (or (not text)
+					 (string-empty-p
+                                          (string-trim text)))
+                                   (message
+                                    "[whisper-live] DEBUG - Empty text! Raw output:\n%s"
+                                    (substring raw-output 0
+                                               (min 1000
+                                                    (length raw-output)))))
+				 ;; Save full raw output to file if debug enabled
+				 (when whisper-live-debug-output
+                                   (let ((debug-file
+                                          (format
+					   "/tmp/whisper-live-debug-%s.txt"
+                                           (format-time-string
+					    "%Y%m%d-%H%M%S"))))
+                                     (with-temp-file debug-file
+                                       (insert raw-output))
+                                     (message
+				      "[whisper-live] Debug output saved to: %s"
+				      debug-file)))
+				 ;; Show brief info in messages (only if empty or verbose mode)
+				 (when (or (not text)
+                                           (string-empty-p
+					    (string-trim text)))
+                                   (message
+                                    "[whisper-live] Transcription #%d took %.2fs: %s"
+                                    (1+ whisper-live--sentence-counter)
+                                    duration
+                                    (if text
+					(substring text 0
+                                                   (min 50
+							(length text)))
+                                      "empty")))
+				 (whisper-live--handle-transcription
+                                  text))
                                (setq
-                                whisper-live--transcription-duration
-                                duration)
-                               ;; Debug: show raw output only when text is empty
+				whisper-live--current-transcription
+                                nil)
+                               (whisper-live--process-transcription-queue)
+                               ;; Only start next recording if queue is empty (back-off system)
                                (when
-                                   (or (not text)
-                                       (string-empty-p
-                                        (string-trim text)))
-                                 (message
-                                  "[whisper-live] DEBUG - Empty text! Raw output:\n%s"
-                                  (substring raw-output 0
-                                             (min 1000
-                                                  (length raw-output)))))
-                               ;; Save full raw output to file if debug enabled
-                               (when whisper-live-debug-output
-                                 (let ((debug-file
-                                        (format "/tmp/whisper-live-debug-%s.txt"
-                                                (format-time-string "%Y%m%d-%H%M%S"))))
-                                   (with-temp-file debug-file
-                                     (insert raw-output))
-                                   (message "[whisper-live] Debug output saved to: %s" debug-file)))
-                               ;; Show brief info in messages (only if empty or verbose mode)
-                               (when (or (not text)
-                                        (string-empty-p (string-trim text)))
-                                 (message
-                                  "[whisper-live] Transcription #%d took %.2fs: %s"
-                                  (1+ whisper-live--sentence-counter)
-                                  duration
-                                  (if text
-                                      (substring text 0
-                                                 (min 50 (length text)))
-                                    "empty")))
-                               (whisper-live--handle-transcription
-                                text))
-                             (setq whisper-live--current-transcription
-                                   nil)
-                             (whisper-live--process-transcription-queue)
-                             ;; Only start next recording if queue is empty (back-off system)
-                             (when
-                                 (not
-                                  whisper-live--transcription-queue)
-                               (whisper-live--record-chunk))
-                             (kill-buffer process-buffer))))))))))  ; extra paren for debug-buffer let
-
+                                   (not
+                                    whisper-live--transcription-queue)
+				 (whisper-live--record-chunk))
+                               (kill-buffer process-buffer))))))))))
+					; extra paren for debug-buffer let
 (defun whisper-live--record-chunk ()
   "Record a single audio chunk."
   (let ((chunk-file (whisper-live--generate-chunk-filename)))
@@ -311,14 +332,19 @@ Also checks for voice commands."
            :sentinel (lambda (_process event)
                        (when (string-equal "finished\n" event)
                          ;; Check volume threshold before processing
-                         (if (whisper-live--chunk-has-speech-p chunk-file)
+                         (if
+			     (whisper-live--chunk-has-speech-p
+			      chunk-file)
                              (progn
                                ;; Beep without verbose messages
                                (when whisper-live-beep-on-chunk
-                                 (whisper-live--beep whisper-live-beep-chunk-frequency 200 2))
+                                 (whisper-live--beep
+				  whisper-live-beep-chunk-frequency
+				  200 2))
                                ;; Choose transcription mode based on setting
                                (let ((file-to-transcribe
-                                      (if whisper-live-independent-chunks
+                                      (if
+					  whisper-live-independent-chunks
                                           ;; Independent mode: transcribe single chunk
                                           chunk-file
                                         ;; Concatenated mode: combine chunks for context
@@ -329,7 +355,6 @@ Also checks for voice commands."
                                  (whisper-live--process-transcription-queue)))
                            ;; Volume too low - skip transcription, start next recording
                            (whisper-live--record-chunk))))))))
-
 
 (provide 'whisper-live-transcribe)
 
