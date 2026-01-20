@@ -17,6 +17,7 @@
   (add-to-list 'load-path (expand-file-name "src" default-directory)))
 
 (require 'whisper-live-core)
+(require 'whisper-live-audio)
 ;; whisper-live-run is optional (requires 'request package)
 (condition-case nil
     (require 'whisper-live-run)
@@ -34,38 +35,25 @@
   (should (numberp whisper-live--max-chunks))
   (should (> whisper-live--max-chunks 0)))
 
-(ert-deftest test-whisper-live-mode-line-indicator ()
-  "Test mode line indicator is a string."
-  (should (stringp whisper-live-mode-line-indicator))
-  (should (> (length whisper-live-mode-line-indicator) 0)))
+(ert-deftest test-whisper-live-mode-line-format ()
+  "Test mode line format exists."
+  (should (boundp 'whisper-live-mode-line-format)))
 
-(ert-deftest test-whisper-live-audio-feedback-boolean ()
-  "Test audio feedback setting is boolean."
-  (should (or (eq whisper-live-audio-feedback t)
-              (eq whisper-live-audio-feedback nil))))
+(ert-deftest test-whisper-live-debug-flag ()
+  "Test debug flag is boolean."
+  (should (booleanp whisper-live-debug-flag)))
 
-(ert-deftest test-whisper-live-buzzer-frequency ()
-  "Test buzzer frequency is valid."
-  (should (numberp whisper-live-buzzer-frequency))
-  (should (> whisper-live-buzzer-frequency 0))
-  (should (< whisper-live-buzzer-frequency 20000)))
+(ert-deftest test-whisper-live-debug-message-function ()
+  "Test debug message function exists."
+  (should (fboundp 'whisper-live-debug-message)))
 
-(ert-deftest test-whisper-live-buzzer-volume ()
-  "Test buzzer volume is in valid range."
-  (should (numberp whisper-live-buzzer-volume))
-  (should (>= whisper-live-buzzer-volume 0.0))
-  (should (<= whisper-live-buzzer-volume 1.0)))
+(ert-deftest test-whisper-live-adaptive-threshold ()
+  "Test adaptive threshold is boolean."
+  (should (booleanp whisper-live-adaptive-threshold)))
 
-(ert-deftest test-whisper-live-number-chunks-boolean ()
-  "Test number chunks setting is boolean."
-  (should (or (eq whisper-live-number-chunks t)
-              (eq whisper-live-number-chunks nil))))
-
-(ert-deftest test-whisper-live-chunk-format ()
-  "Test chunk format is a string with format specifiers."
-  (should (stringp whisper-live-chunk-format))
-  (should (string-match-p "%d" whisper-live-chunk-format))
-  (should (string-match-p "%s" whisper-live-chunk-format)))
+(ert-deftest test-whisper-live-volume-threshold ()
+  "Test volume threshold is a number."
+  (should (numberp whisper-live-volume-threshold)))
 
 ;;; Function Tests
 
@@ -82,16 +70,18 @@
   (let ((whisper-live--current-process nil)
         (whisper-live--transcription-queue '("file1" "file2"))
         (whisper-live--transcription-text "some text")
-        (whisper-live--chunk-counter 5))
+        (whisper-live--chunk-id 5))
     (whisper-live--cleanup)
     (should (null whisper-live--current-process))
     (should (null whisper-live--transcription-queue))
     (should (null whisper-live--transcription-text))
-    (should (= whisper-live--chunk-counter 0))))
+    (should (= whisper-live--chunk-id 0))))
 
 (ert-deftest test-whisper-live-init ()
   "Test initialization function."
   (let ((whisper-live--initialized nil))
+    ;; First update chunks directory (separate from init)
+    (whisper-live--update-chunks-directory)
     (whisper-live--init)
     (should whisper-live--chunks-directory)
     (should (file-directory-p whisper-live--chunks-directory))
