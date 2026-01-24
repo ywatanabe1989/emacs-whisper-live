@@ -11,6 +11,18 @@
 (require 'whisper-live-core)
 (require 'whisper-live-audio)
 (require 'whisper-live-vterm)
+(require 'whisper-live-accumulative)
+
+;; Prefix insertion configuration
+
+(defvar whisper-live-insert-prefix nil
+  "When non-nil, insert a prefix message before the first transcription.")
+
+(defvar whisper-live-prefix-message "[Transcription started]\n"
+  "Prefix message to insert before first transcription when enabled.")
+
+(defvar whisper-live--prefix-inserted nil
+  "Internal flag tracking if prefix has been inserted in current session.")
 
 (defvar whisper-live--transcription-queue nil
   "Queue of files waiting to be transcribed.")
@@ -189,9 +201,15 @@ Also checks for voice commands."
            (clean-text
             (whisper--live-remove-tags
              whisper-live--transcription-text))
-           ;; Extract only last N words for display
+           ;; Extract text for display based on mode
            (display-text
-	    (whisper-live--extract-last-words clean-text)))
+            (if
+		(eq (whisper-live--get-transcription-mode)
+		    'accumulative)
+                ;; Accumulative mode: use text diffing
+                (whisper-live--accumulative-diff-text clean-text)
+              ;; Other modes: extract last N words
+              (whisper-live--extract-last-words clean-text))))
 	(when (and (buffer-live-p target-buffer)
                    (not (string-empty-p clean-text))
                    (not (string-empty-p display-text)))
@@ -343,13 +361,8 @@ Also checks for voice commands."
 				  200 2))
                                ;; Choose transcription mode based on setting
                                (let ((file-to-transcribe
-                                      (if
-					  whisper-live-independent-chunks
-                                          ;; Independent mode: transcribe single chunk
-                                          chunk-file
-                                        ;; Concatenated mode: combine chunks for context
-                                        (whisper-live--concatenate-chunks
-                                         whisper-live--chunks-directory))))
+                                      (whisper-live--accumulative-get-file-for-transcription
+                                       chunk-file)))
                                  (push file-to-transcribe
                                        whisper-live--transcription-queue)
                                  (whisper-live--process-transcription-queue)))
