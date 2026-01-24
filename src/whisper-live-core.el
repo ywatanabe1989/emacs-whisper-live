@@ -200,6 +200,9 @@ If CANCELING is non-nil, set canceling flag to prevent insertions."
         whisper-live--last-activity-time nil
         whisper-live--session-start-time nil)
   (whisper-live--cleanup-markers)
+  ;; Clean up accumulative mode state if available
+  (when (fboundp 'whisper-live--accumulative-cleanup)
+    (whisper-live--accumulative-cleanup))
   ;; Reset canceling flag after a short delay
   (when canceling
     (run-with-timer 0.1 nil

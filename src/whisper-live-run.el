@@ -5,13 +5,13 @@
 
 ;;; Copyright (C) 2025 Yusuke Watanabe (ywatanabe@scitex.ai)
 
-
 ;;; Time-stamp: <2024-12-08 19:20:40 (ywatanabe)>
 
 (require 'whisper-live-core)
 (require 'whisper-live-audio)
 (require 'whisper-live-transcribe)
 (require 'whisper-live-llm)
+(require 'whisper-live-accumulative)
 
 ;;;###autoload
 
@@ -64,8 +64,13 @@ Voice command: 'speech completed' or 'completed speech'."
               whisper-live--transcription-queue)
       (whisper-live--cleanup))
     (whisper-live--init)
+    ;; Reset prefix insertion flag for new session
+    (setq whisper-live--prefix-inserted nil)
     (whisper-live--update-chunks-directory)
     (whisper-live--ensure-directory)
+    ;; Initialize accumulative mode if selected
+    (when (eq (whisper-live--get-transcription-mode) 'accumulative)
+      (whisper-live--accumulative-init))
     (whisper-live--update-tags)
     (setq whisper-live--target-buffer (current-buffer)
           whisper-live--insert-marker (point-marker)
@@ -80,7 +85,6 @@ Voice command: 'speech completed' or 'completed speech'."
     (when whisper-live-beep-on-start
       (whisper-live--beep whisper-live-beep-start-frequency 200 1))
     (message "Live transcription started")))
-
 
 (provide 'whisper-live-run)
 
