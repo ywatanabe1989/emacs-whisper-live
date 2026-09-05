@@ -9,7 +9,7 @@
 ;;; whisper-live.el --- Real-time speech transcription with Whisper -*- lexical-binding: t; -*-
 
 ;; Author: Yusuke Watanabe <ywatanabe@scitex.ai>
-;; Version: 1.2.0
+;; Version: 1.4.0
 ;; Package-Requires: ((emacs "27.1"))
 ;; Keywords: multimedia, speech, transcription
 ;; URL: https://github.com/ywatanabe1989/emacs-whisper-live
@@ -27,8 +27,9 @@
 ;; This package provides continuous, live transcription with features like:
 ;;
 ;; - Chunk-based recording and transcription
-;; - Delta detection to prevent duplicate text
-;; - Numbered chunks for easy reference
+;; - Revisable accumulative transcription for improved context
+;; - Local or SSH-backed Whisper inference
+;; - Optional numbered chunks or continuous prose
 ;; - VTerm support for terminal integration
 ;; - Optional LLM cleanup with Claude
 ;;
