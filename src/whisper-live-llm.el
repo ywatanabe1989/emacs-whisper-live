@@ -8,8 +8,10 @@
 
 ;;; Time-stamp: <2024-12-08 19:17:19 (ywatanabe)>
 
-(require 'request)
 (require 'whisper-live-core)
+
+(declare-function request "request")
+(declare-function request-response-data "request-response")
 
 (defvar whisper-live-anthropic-key
   (or (getenv "ANTHROPIC_API_KEY") "")
@@ -90,6 +92,8 @@
   "Clean RAW-TRANSCRIPTION using LLM."
   (when (and whisper-live-anthropic-key
              (not (string-empty-p whisper-live-anthropic-key)))
+    (unless (require 'request nil t)
+      (user-error "Install request.el to enable whisper-live LLM cleanup"))
     (if (string-empty-p raw-transcription)
         raw-transcription
       (condition-case err

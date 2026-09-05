@@ -248,9 +248,9 @@ When using :buffer without :stderr, we only get stdout which is the transcriptio
   "Extract the last NUM-WORDS words from TEXT.
 If NUM-WORDS is nil, uses `whisper-live-display-words`.
 If NUM-WORDS is nil and `whisper-live-display-words` is nil, returns full text."
-  (when (and text (not (string-empty-p text)))
-    (let* ((word-limit (or num-words whisper-live-display-words))
-           (trimmed (string-trim text)))
+  (when-let ((trimmed (and text (string-trim text))))
+    (unless (string-empty-p trimmed)
+      (let ((word-limit (or num-words whisper-live-display-words)))
       (if word-limit
           ;; Split into words and take last N
           (let* ((words (split-string trimmed))
@@ -259,7 +259,7 @@ If NUM-WORDS is nil and `whisper-live-display-words` is nil, returns full text."
                  (last-words (seq-subseq words start-idx)))
             (string-join last-words " "))
         ;; No limit - return full text
-        trimmed))))
+          trimmed)))))
 
 (defun whisper-live--check-voice-command (text)
   "Check if TEXT contains a voice command and execute it.

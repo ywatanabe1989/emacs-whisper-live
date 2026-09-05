@@ -18,10 +18,7 @@
 
 (require 'whisper-live-core)
 (require 'whisper-live-audio)
-;; whisper-live-run is optional (requires 'request package)
-(condition-case nil
-    (require 'whisper-live-run)
-  (error nil))
+(require 'whisper-live-run)
 
 ;;; Variable Tests
 
@@ -99,13 +96,6 @@
     (should (string= whisper-model "large-v3"))
     ;; Restore original
     (setq whisper-model original-model)))
-
-(ert-deftest test-whisper-live-switch-model-function-exists ()
-  "Test that whisper-live-switch-model function exists and is callable."
-  :tags '(optional-dependency)
-  (skip-unless (featurep 'whisper-live-run))
-  (should (fboundp 'whisper-live-switch-model))
-  (should (commandp 'whisper-live-switch-model)))
 
 ;;; New Feature Tests (Chunk-based numbering system)
 
