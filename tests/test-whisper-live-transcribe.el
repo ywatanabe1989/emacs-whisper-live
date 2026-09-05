@@ -137,6 +137,92 @@ Delta should be empty when text hasn't changed."
       (should (member "--prompt" cmd))
       (should (member "Emacs, elisp, Python" cmd)))))
 
+(ert-deftest test-whisper-live-command-remote ()
+  "Test remote transcription command generation."
+  (let ((whisper-live-remote-host "compute.example")
+        (whisper-live-remote-model "large-v3-turbo-q5_0")
+        (whisper-live-remote-program "/tmp/whisper-live-remote")
+        (whisper-language "en")
+        (test-file "/tmp/test.wav"))
+    (should
+     (equal (whisper-live--command test-file)
+            '("/tmp/whisper-live-remote"
+              "--host" "compute.example"
+              "--language" "en"
+              "--model" "large-v3-turbo-q5_0"
+              "--file" "/tmp/test.wav")))))
+
+(ert-deftest test-whisper-live-format-numbered-chunk ()
+  "Test numbered chunk formatting."
+  (let ((whisper-live-number-chunks t)
+        (whisper-live-chunk-format "[%03d] %s\n"))
+    (should (equal (whisper-live--format-chunk 7 "Hello.")
+                   "[007] Hello.\n"))))
+
+(ert-deftest test-whisper-live-format-unnumbered-chunk ()
+  "Test sentence-style chunk formatting."
+  (let ((whisper-live-number-chunks nil)
+        (whisper-live-unnumbered-separator " "))
+    (should (equal (whisper-live--format-chunk 7 "Hello.")
+                   "Hello. "))))
+
+(ert-deftest test-whisper-live-replace-provisional-buffer-text ()
+  "A contextual transcription should revise, not append to, buffer text."
+  (with-temp-buffer
+    (insert "Prompt: ")
+    (let ((whisper-live--insert-marker (point-marker))
+          (whisper-live--insert-end-marker (point-marker))
+          (whisper-live-number-chunks nil)
+          (whisper-live-unnumbered-separator " ")
+          (whisper-live-insert-prefix nil)
+          (whisper-live-clean-with-llm nil))
+      (whisper-live--replace-chunk-buffer 1 "First version.")
+      (should (equal (buffer-string) "Prompt: First version. "))
+      (whisper-live--replace-chunk-buffer 2 "A more natural revision.")
+      (should (equal (buffer-string)
+                     "Prompt: A more natural revision. ")))))
+
+(ert-deftest test-whisper-live-replace-provisional-vterm-text ()
+  "Vterm revision should erase exactly the prior provisional input."
+  (let ((whisper-live--last-sent-length 4)
+        (whisper-live-number-chunks nil)
+        (whisper-live-unnumbered-separator " ")
+        (whisper-live-insert-prefix nil)
+        (backspaces 0)
+        sent)
+    (cl-letf (((symbol-function 'get-buffer-process)
+               (lambda (_buffer) 'mock-process))
+              ((symbol-function 'vterm-send-backspace)
+               (lambda () (setq backspaces (1+ backspaces))))
+              ((symbol-function 'vterm-send-string)
+               (lambda (text &optional _paste-p) (setq sent text))))
+      (whisper-live--replace-chunk-vterm 2 "Revised.")
+      (should (= backspaces 4))
+      (should (equal sent "Revised. "))
+      (should (= whisper-live--last-sent-length (length "Revised. "))))))
+
+(ert-deftest test-whisper-live-accumulative-handler-revises-text ()
+  "Accumulation should replace an earlier hypothesis with the full revision."
+  (with-temp-buffer
+    (let ((whisper-live--insert-marker (point-marker))
+          (whisper-live--insert-end-marker (point-marker))
+          (whisper-live-transcription-mode 'accumulative)
+          (whisper-live-accumulative-revise-text t)
+          (whisper-live-number-chunks nil)
+          (whisper-live-unnumbered-separator " ")
+          (whisper-live-insert-prefix nil)
+          (whisper-live-clean-with-llm nil)
+          (whisper-live-voice-commands-enabled nil)
+          (whisper-live--canceling nil)
+          (whisper-live--chunk-id 0)
+          (whisper-live--chunks nil)
+          (whisper-live-transcribe-hook nil))
+      (cl-letf (((symbol-function 'whisper--live-remove-tags) #'identity))
+        (whisper-live--handle-transcription "I am work on it.")
+        (whisper-live--handle-transcription "I am working on it."))
+      (should (equal (buffer-string) "I am working on it. "))
+      (should (= whisper-live--chunk-id 2)))))
+
 ;;; Queue Tests
 
 (ert-deftest test-whisper-live-transcription-queue-init ()

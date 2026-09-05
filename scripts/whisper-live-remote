@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Stream a local WAV file to a remote whisper-live worker over SSH.
+
+set -euo pipefail
+
+host="scitex-compute-04"
+language="en"
+model="base-q5_0"
+audio_file=""
+
+usage() {
+    printf 'Usage: %s [--host HOST] [--language CODE] [--model MODEL] --file WAV\n' "$0" >&2
+}
+
+while (($#)); do
+    case "$1" in
+        --host)
+            host=${2:?missing SSH host}
+            shift 2
+            ;;
+        --language)
+            language=${2:?missing language}
+            shift 2
+            ;;
+        --model)
+            model=${2:?missing model}
+            shift 2
+            ;;
+        --file)
+            audio_file=${2:?missing audio file}
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            usage
+            printf 'Unknown argument: %s\n' "$1" >&2
+            exit 2
+            ;;
+    esac
+done
+
+if [[ -z "$audio_file" || ! -f "$audio_file" ]]; then
+    printf 'Audio file does not exist: %s\n' "$audio_file" >&2
+    exit 2
+fi
+
+# These values become remote shell arguments, so accept identifiers only.
+if [[ ! "$host" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+    printf 'Invalid SSH host: %s\n' "$host" >&2
+    exit 2
+fi
+if [[ ! "$language" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
+    printf 'Invalid language: %s\n' "$language" >&2
+    exit 2
+fi
+if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    printf 'Invalid model: %s\n' "$model" >&2
+    exit 2
+fi
+
+exec ssh -T -o BatchMode=yes -o ConnectTimeout=5 "$host" \
+    "\$HOME/.local/bin/whisper-live-transcribe $language $model" < "$audio_file"

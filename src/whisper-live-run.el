@@ -15,33 +15,55 @@
 
 ;;;###autoload
 
-(defun whisper-live-stop ()
-  "Stop live transcription (voice command: 'speech end')."
-  (interactive)
-  (when whisper-live--current-process
+(defun whisper-live--finish-stop ()
+  "Clean up a completed session and optionally submit its vterm input."
+  (let ((target-buffer whisper-live--target-buffer)
+        (send-after-stop whisper-live--send-after-stop))
     (whisper-live--cleanup)
     (when whisper-live-beep-on-stop
       (whisper-live--beep whisper-live-beep-stop-frequency 300 1))
-    (message "[whisper-live] Stopped")))
+    (if (and send-after-stop
+             target-buffer
+             (buffer-live-p target-buffer))
+        (run-with-timer
+         0.1 nil
+         (lambda ()
+           (when (buffer-live-p target-buffer)
+             (with-current-buffer target-buffer
+               (when (derived-mode-p 'vterm-mode)
+                 (vterm-send-return)
+                 (message "[whisper-live] Sent to AI"))))))
+      (message "[whisper-live] Stopped"))))
+
+(defun whisper-live-stop ()
+  "Stop live transcription (voice command: 'speech end')."
+  (interactive)
+  (cond
+   ;; Ask ffmpeg to close the current partial WAV cleanly.  Its sentinel will
+   ;; enqueue that last audio before the final cleanup.
+   ((and whisper-live--current-process
+         (process-live-p whisper-live--current-process))
+    (unless whisper-live--stop-after-transcription
+      (setq whisper-live--stop-after-transcription t)
+      (condition-case nil
+          (process-send-string whisper-live--current-process "q")
+        (error (whisper-live--finish-stop))))
+    (message "[whisper-live] Finishing the last words..."))
+   ;; A finalized recording may still be in the GPU queue.
+   ((or whisper-live--current-transcription
+        whisper-live--transcription-queue)
+    (setq whisper-live--stop-after-transcription t)
+    (message "[whisper-live] Finishing the last transcription..."))
+   ;; All recording and transcription work has completed.
+   (whisper-live--current-process
+    (whisper-live--finish-stop))))
 
 (defun whisper-live-stop-and-send ()
   "Stop transcription and send Enter in vterm to submit to AI.
 Voice command: 'speech completed' or 'completed speech'."
   (interactive)
-  (let ((target-buffer whisper-live--target-buffer))
-    ;; Stop transcription first
-    (whisper-live-stop)
-    ;; Then send Enter in vterm if target was vterm
-    (when (and target-buffer (buffer-live-p target-buffer))
-      (with-current-buffer target-buffer
-        (when (derived-mode-p 'vterm-mode)
-          ;; Small delay to ensure transcription text is fully inserted
-          (run-with-timer 0.2 nil
-                          (lambda ()
-                            (when (buffer-live-p target-buffer)
-                              (with-current-buffer target-buffer
-                                (vterm-send-return)
-                                (message "[whisper-live] Sent to AI"))))))))))
+  (setq whisper-live--send-after-stop t)
+  (whisper-live-stop))
 
 (defun whisper-live-cancel ()
   "Cancel current transcription and clear pending text (voice command: 'clear whisper')."

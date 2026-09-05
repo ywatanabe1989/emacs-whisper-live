@@ -111,6 +111,16 @@ Reduced to 6 (~30 seconds of audio) to prevent whisper timeout on long audio fil
   "When non-nil (default), transcribe each chunk independently without concatenation.
 When nil, chunks are concatenated for better context.")
 
+(defvar whisper-live-accumulative-revise-text t
+  "When non-nil, replace provisional text with each full transcription.
+This lets Whisper revise earlier wording and punctuation as more audio context
+becomes available.")
+
+(defvar whisper-live-accumulative-stop-at-max-duration nil
+  "When non-nil, finish the session at the accumulative duration limit.
+The last complete transcription is inserted before recording stops.  This
+avoids silently dropping the beginning of a revisable utterance.")
+
 ;; Volume threshold configuration
 (defvar whisper-live-volume-threshold -35
   "Minimum mean volume in dB to process a chunk.
@@ -153,7 +163,13 @@ Commands use 'speech' keyword to be distinctive from normal conversation.
   "Currently running transcription process.")
 
 (defvar whisper-live--last-sent-length 0
-  "Length of last text sent to terminal for backspacing.")
+  "Character length of provisional text last sent to a terminal.")
+
+(defvar whisper-live--stop-after-transcription nil
+  "When non-nil, stop after the final queued transcription is inserted.")
+
+(defvar whisper-live--send-after-stop nil
+  "When non-nil, submit vterm input after the final transcription is inserted.")
 
 (defvar whisper-live--sentence-counter 0
   "Counter for numbering transcribed sentences.")
@@ -194,6 +210,8 @@ If CANCELING is non-nil, set canceling flag to prevent insertions."
         whisper-live--current-transcription nil
         whisper-live--transcription-text nil
         whisper-live--last-sent-length 0
+        whisper-live--stop-after-transcription nil
+        whisper-live--send-after-stop nil
         whisper-live--sentence-counter 0
         whisper-live--chunk-id 0
         whisper-live--chunks nil
@@ -656,6 +674,8 @@ Bind this to a key like Alt-Enter for quick access."
           whisper-live--current-transcription nil
           whisper-live--transcription-text nil
           whisper-live--last-sent-length 0
+          whisper-live--stop-after-transcription nil
+          whisper-live--send-after-stop nil
           whisper-live--sentence-counter 0
           whisper-live--chunk-id 0
           whisper-live--chunks nil

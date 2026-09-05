@@ -13,6 +13,111 @@
 (require 'whisper-live-vterm)
 (require 'whisper-live-accumulative)
 
+;; Defined by whisper-live-llm, which is loaded after this module.
+(defvar whisper-live-clean-with-llm nil)
+(defvar whisper-live-start-tag nil)
+(defvar whisper-live-end-tag nil)
+
+;; Transcription backend configuration
+
+(defvar whisper-live-initial-prompt ""
+  "Optional vocabulary prompt passed to the local Whisper backend.")
+
+(defvar whisper-live-remote-host nil
+  "SSH host used for transcription, or nil to run Whisper locally.")
+
+(defvar whisper-live-remote-model nil
+  "Model name used by the remote transcription backend.
+When nil, derive the name from `whisper-model' and `whisper-quantize'.")
+
+(defvar whisper-live-remote-program
+  (expand-file-name
+   "../scripts/whisper-live-remote"
+   (file-name-directory (or load-file-name buffer-file-name)))
+  "Local helper program that streams audio to the remote backend over SSH.")
+
+(defvar whisper-live-number-chunks t
+  "When non-nil, include a chunk number in inserted transcriptions.")
+
+(defvar whisper-live-chunk-format "[%03d] %s\n"
+  "Format string used for numbered transcription chunks.")
+
+(defvar whisper-live-unnumbered-separator " "
+  "Text inserted after each transcription when chunk numbers are hidden.")
+
+(defun whisper-live--model-name ()
+  "Return the configured Whisper model name, including quantization."
+  (if whisper-quantize
+      (format "%s-%s" whisper-model whisper-quantize)
+    whisper-model))
+
+(defun whisper-live--command (input-file)
+  "Build the transcription command for INPUT-FILE.
+Use `whisper-live-remote-host' when configured, otherwise use the bundled
+local whisper.cpp command builder."
+  (if whisper-live-remote-host
+      (list whisper-live-remote-program
+            "--host" whisper-live-remote-host
+            "--language" whisper-language
+            "--model" (or whisper-live-remote-model
+                          (whisper-live--model-name))
+            "--file" input-file)
+    (let ((whisper--install-path
+           (or whisper--install-path
+               (expand-file-name "whisper.cpp/"
+                                 whisper-install-directory))))
+      (append (whisper-command input-file)
+              (when (and whisper-live-initial-prompt
+                         (not (string-empty-p whisper-live-initial-prompt)))
+                (list "--prompt" whisper-live-initial-prompt))))))
+
+(defun whisper-live--format-chunk (chunk-id text)
+  "Format transcription TEXT with CHUNK-ID for insertion."
+  (if whisper-live-number-chunks
+      (format whisper-live-chunk-format chunk-id text)
+    (concat text whisper-live-unnumbered-separator)))
+
+(defun whisper-live--replace-chunk-vterm (chunk-id clean-text)
+  "Replace provisional vterm input with CLEAN-TEXT from CHUNK-ID."
+  (when-let ((proc (get-buffer-process (current-buffer))))
+    (ignore proc)
+    (dotimes (_ whisper-live--last-sent-length)
+      (vterm-send-backspace))
+    (when-let ((prefix (whisper-live--maybe-insert-prefix)))
+      (vterm-send-string prefix))
+    (let ((replacement (whisper-live--format-chunk chunk-id clean-text)))
+      (vterm-send-string replacement)
+      (setq whisper-live--last-sent-length (length replacement)))))
+
+(defun whisper-live--replace-chunk-term (chunk-id clean-text)
+  "Replace provisional term input with CLEAN-TEXT from CHUNK-ID."
+  (when-let ((proc (get-buffer-process (current-buffer))))
+    (when (> whisper-live--last-sent-length 0)
+      (term-send-string proc
+                        (make-string whisper-live--last-sent-length 127)))
+    (when-let ((prefix (whisper-live--maybe-insert-prefix)))
+      (term-send-string proc prefix))
+    (let ((replacement (whisper-live--format-chunk chunk-id clean-text)))
+      (term-send-string proc replacement)
+      (setq whisper-live--last-sent-length (length replacement)))))
+
+(defun whisper-live--replace-chunk-buffer (chunk-id clean-text)
+  "Replace provisional regular-buffer input with CLEAN-TEXT from CHUNK-ID."
+  (let ((inhibit-read-only t)
+        (replacement (whisper-live--format-chunk chunk-id clean-text)))
+    (goto-char whisper-live--insert-marker)
+    (delete-region whisper-live--insert-marker whisper-live--insert-end-marker)
+    ;; Keep an optional one-time prefix outside the revisable region.
+    (when-let ((prefix (whisper-live--maybe-insert-prefix)))
+      (insert prefix)
+      (set-marker whisper-live--insert-marker (point)))
+    (when whisper-live-clean-with-llm
+      (insert whisper-live-start-tag))
+    (insert replacement)
+    (when whisper-live-clean-with-llm
+      (insert whisper-live-end-tag))
+    (set-marker whisper-live--insert-end-marker (point))))
+
 ;; Prefix insertion configuration
 
 (defvar whisper-live-insert-prefix nil
@@ -105,9 +210,8 @@ When using :buffer without :stderr, we only get stdout which is the transcriptio
       ;; Insert prefix if this is the first transcription
       (when-let ((prefix (whisper-live--maybe-insert-prefix)))
         (vterm-send-string prefix))
-      ;; Send numbered text with [001] format
       (vterm-send-string
-       (format "[%03d] %s\n" chunk-id clean-text)))))
+       (whisper-live--format-chunk chunk-id clean-text)))))
 
 (defun whisper-live--insert-chunk-term (chunk-id clean-text)
   "Insert CLEAN-TEXT into term buffer with CHUNK-ID."
@@ -118,9 +222,8 @@ When using :buffer without :stderr, we only get stdout which is the transcriptio
     ;; Insert prefix if this is the first transcription
     (when-let ((prefix (whisper-live--maybe-insert-prefix)))
       (term-send-string (get-buffer-process (current-buffer)) prefix))
-    ;; Send numbered text with [001] format
     (term-send-string (get-buffer-process (current-buffer))
-                      (format "[%03d] %s\n" chunk-id clean-text))))
+                      (whisper-live--format-chunk chunk-id clean-text))))
 
 (defun whisper-live--insert-chunk-buffer (chunk-id clean-text)
   "Insert CLEAN-TEXT into regular buffer with CHUNK-ID."
@@ -129,14 +232,14 @@ When using :buffer without :stderr, we only get stdout which is the transcriptio
              (not (string-match-p "^[[:space:].,!?;:]*$" clean-text)))
     (let ((inhibit-read-only t)
           (prefix (whisper-live--maybe-insert-prefix)))
-      ;; Go to end marker and insert numbered text with [001] format
+      ;; Go to the end marker and insert the formatted transcription.
       (goto-char whisper-live--insert-end-marker)
       ;; Insert prefix if this is the first transcription
       (when prefix
         (insert prefix))
       (when whisper-live-clean-with-llm
         (insert whisper-live-start-tag))
-      (insert (format "[%03d] %s\n" chunk-id clean-text))
+      (insert (whisper-live--format-chunk chunk-id clean-text))
       (when whisper-live-clean-with-llm
         (insert whisper-live-end-tag))
       (set-marker whisper-live--insert-end-marker (point)))))
@@ -198,21 +301,29 @@ Also checks for voice commands."
             (whisper-live--clean-transcript text))
       (let*
 	  ((target-buffer (marker-buffer whisper-live--insert-marker))
+           (mode (whisper-live--get-transcription-mode))
+           (revise-p (and (eq mode 'accumulative)
+                          whisper-live-accumulative-revise-text))
            (clean-text
             (whisper--live-remove-tags
              whisper-live--transcription-text))
            ;; Extract text for display based on mode
            (display-text
-            (if
-		(eq (whisper-live--get-transcription-mode)
-		    'accumulative)
+            (cond
+             (revise-p
+              ;; Reinsert the complete, increasingly contextual transcript.
+              clean-text)
+             ((eq mode 'accumulative)
                 ;; Accumulative mode: use text diffing
-                (whisper-live--accumulative-diff-text clean-text)
+              (whisper-live--accumulative-diff-text clean-text))
+             (t
               ;; Other modes: extract last N words
-              (whisper-live--extract-last-words clean-text))))
+              (whisper-live--extract-last-words clean-text)))))
 	(when (and (buffer-live-p target-buffer)
                    (not (string-empty-p clean-text))
                    (not (string-empty-p display-text)))
+          (when revise-p
+            (setq whisper-live--previous-transcription clean-text))
           ;; Increment chunk ID and store chunk data
           (setq whisper-live--chunk-id (1+ whisper-live--chunk-id))
           (let ((chunk-entry (list :id whisper-live--chunk-id
@@ -225,27 +336,31 @@ Also checks for voice commands."
             (with-current-buffer target-buffer
               (cond
                ((derived-mode-p 'vterm-mode)
-		;; VTerm: send numbered text
-		(whisper-live--insert-chunk-vterm
-		 whisper-live--chunk-id
-		 display-text))
+		(if revise-p
+                    (whisper-live--replace-chunk-vterm
+                     whisper-live--chunk-id display-text)
+                  (whisper-live--insert-chunk-vterm
+                   whisper-live--chunk-id display-text)))
                ((derived-mode-p 'term-mode)
-		;; Term: send numbered text
-		(whisper-live--insert-chunk-term
-		 whisper-live--chunk-id
-		 display-text))
+		(if revise-p
+                    (whisper-live--replace-chunk-term
+                     whisper-live--chunk-id display-text)
+                  (whisper-live--insert-chunk-term
+                   whisper-live--chunk-id display-text)))
                (buffer-read-only
 		(message "Read-only buffer: [%03d] %s"
 			 whisper-live--chunk-id display-text))
                (t
-		;; Regular buffer: insert numbered text
-		(whisper-live--insert-chunk-buffer
-		 whisper-live--chunk-id display-text))))
-            (run-hooks 'whisper-live-transcribe-hook)))))))
+		(if revise-p
+                    (whisper-live--replace-chunk-buffer
+                     whisper-live--chunk-id display-text)
+                  (whisper-live--insert-chunk-buffer
+                   whisper-live--chunk-id display-text))))
+            (run-hooks 'whisper-live-transcribe-hook))))))))
 					; close unless
 (defun whisper-live--transcribe-chunk (concatenated-file)
   "Transcribe a single CONCATENATED-FILE."
-  (let ((cmd (whisper-command concatenated-file))
+  (let ((cmd (whisper-live--command concatenated-file))
         (temp-buffer (generate-new-buffer " *whisper-temp*"))
         (start-time (current-time)))
     (when (and cmd (car cmd))
@@ -327,11 +442,13 @@ Also checks for voice commands."
 				whisper-live--current-transcription
                                 nil)
                                (whisper-live--process-transcription-queue)
-                               ;; Only start next recording if queue is empty (back-off system)
-                               (when
-                                   (not
-                                    whisper-live--transcription-queue)
-				 (whisper-live--record-chunk))
+                               (when (and whisper-live--stop-after-transcription
+                                          (not whisper-live--current-transcription)
+                                          (not whisper-live--transcription-queue)
+                                          (not (process-live-p
+                                                whisper-live--current-process))
+                                          (fboundp 'whisper-live-stop))
+                                 (whisper-live-stop))
                                (kill-buffer process-buffer))))))))))
 					; extra paren for debug-buffer let
 (defun whisper-live--record-chunk ()
@@ -353,21 +470,38 @@ Also checks for voice commands."
                          (if
 			     (whisper-live--chunk-has-speech-p
 			      chunk-file)
-                             (progn
+                             (let
+                                 ((file-to-transcribe
+                                   (whisper-live--accumulative-get-file-for-transcription
+                                    chunk-file)))
                                ;; Beep without verbose messages
                                (when whisper-live-beep-on-chunk
                                  (whisper-live--beep
 				  whisper-live-beep-chunk-frequency
 				  200 2))
-                               ;; Choose transcription mode based on setting
-                               (let ((file-to-transcribe
-                                      (whisper-live--accumulative-get-file-for-transcription
-                                       chunk-file)))
-                                 (push file-to-transcribe
-                                       whisper-live--transcription-queue)
-                                 (whisper-live--process-transcription-queue)))
-                           ;; Volume too low - skip transcription, start next recording
-                           (whisper-live--record-chunk))))))))
+                               (push file-to-transcribe
+                                     whisper-live--transcription-queue)
+                               ;; Recording and GPU inference now overlap.  At
+                               ;; the configured context limit, wait for this
+                               ;; final full transcription and stop cleanly.
+                               (when (and
+                                      (eq (whisper-live--get-transcription-mode)
+                                          'accumulative)
+                                      whisper-live-accumulative-stop-at-max-duration
+                                      (>= whisper-live--accumulated-duration
+                                          whisper-live-accumulative-max-duration))
+                                 (setq whisper-live--stop-after-transcription t))
+                               (unless whisper-live--stop-after-transcription
+                                 (whisper-live--record-chunk))
+                               (whisper-live--process-transcription-queue))
+                           ;; A quiet window needs no inference; continue at once.
+                           (if whisper-live--stop-after-transcription
+                               (when (and
+                                      (not whisper-live--current-transcription)
+                                      (not whisper-live--transcription-queue)
+                                      (fboundp 'whisper-live-stop))
+                                 (whisper-live-stop))
+                             (whisper-live--record-chunk)))))))))
 
 (provide 'whisper-live-transcribe)
 

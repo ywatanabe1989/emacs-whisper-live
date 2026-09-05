@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Read WAV data on stdin and transcribe it with scitex-audio on this host.
+
+set -euo pipefail
+
+language=${1:-en}
+model=${2:-base-q5_0}
+
+if [[ ! "$language" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]]; then
+    printf 'Invalid language: %s\n' "$language" >&2
+    exit 2
+fi
+if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    printf 'Invalid model: %s\n' "$model" >&2
+    exit 2
+fi
+
+audio_file=$(mktemp "${TMPDIR:-/tmp}/whisper-live.XXXXXX.wav")
+cleanup() {
+    rm -f -- "$audio_file"
+}
+trap cleanup EXIT HUP INT TERM
+
+cat > "$audio_file"
+
+SCITEX_AUDIO_WHISPER_CLI="$HOME/.local/bin/whisper-live-whisper-cli" \
+    "$HOME/proj/scitex-audio/.venv/bin/scitex-audio" \
+    transcribe-audio "$audio_file" --language "$language" --model "$model"

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Add voice activity detection to whisper-cli calls made by scitex-audio.
+
+set -euo pipefail
+
+whisper_cli="$HOME/src/whisper.cpp/build/bin/whisper-cli"
+vad_model="$HOME/.cache/whisper.cpp/models/ggml-silero-v6.2.0.bin"
+
+if [[ ! -x "$whisper_cli" ]]; then
+    printf 'whisper-cli is unavailable: %s\n' "$whisper_cli" >&2
+    exit 1
+fi
+if [[ ! -f "$vad_model" ]]; then
+    printf 'Silero VAD model is unavailable: %s\n' "$vad_model" >&2
+    exit 1
+fi
+
+exec "$whisper_cli" \
+    --vad \
+    --vad-model "$vad_model" \
+    --vad-threshold "${WHISPER_LIVE_VAD_THRESHOLD:-0.80}" \
+    --vad-min-speech-duration-ms 250 \
+    --vad-min-silence-duration-ms 250 \
+    --vad-speech-pad-ms 100 \
+    --no-speech-thold "${WHISPER_LIVE_NO_SPEECH_THRESHOLD:-0.40}" \
+    --suppress-nst \
+    "$@"
