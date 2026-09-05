@@ -57,10 +57,11 @@ make uninstall          # Remove everything
       whisper-live-chunk-format "[%d] %s\n") ; Format
 ```
 
-### Delta Detection (No Duplicates)
+### Revisable Accumulative Transcription
 ```elisp
-(setq whisper-live-delta-overlap-words 10    ; Overlap matching
-      whisper-live-min-delta-chars 3)        ; Skip short deltas
+(setq whisper-live-transcription-mode 'accumulative
+      whisper-live-accumulative-revise-text t
+      whisper-live-number-chunks nil)
 ```
 
 ### LLM Enhancement (Optional)

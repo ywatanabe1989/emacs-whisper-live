@@ -199,9 +199,11 @@ Control how many chunks are used for context:
 (setq whisper-live-number-chunks t)           ; Enable numbering
 (setq whisper-live-chunk-format "[%d] %s\n")  ; Format: [1] text
 
-;; Delta calculation (prevents duplicate text)
-(setq whisper-live-delta-overlap-words 10)  ; Overlap words for matching
-(setq whisper-live-min-delta-chars 3)       ; Min chars to accept chunk
+;; Re-transcribe all accumulated audio and revise provisional text in place
+(setq whisper-live-transcription-mode 'accumulative)
+(setq whisper-live-accumulative-revise-text t)
+(setq whisper-live-accumulative-max-duration 120)
+(setq whisper-live-accumulative-stop-at-max-duration t)
 
 ;; Audio feedback (status buzzer)
 (setq whisper-live-audio-feedback t)        ; Enable status beeps
@@ -354,8 +356,8 @@ A subtle beep plays every time a new chunk is recorded, providing audio confirma
       whisper-live-context-chunks 3
       whisper-live-number-chunks t
       whisper-live-chunk-format "[%d] %s\n"
-      whisper-live-delta-overlap-words 10
-      whisper-live-min-delta-chars 3
+      whisper-live-transcription-mode 'accumulative
+      whisper-live-accumulative-revise-text t
       whisper-live-audio-feedback t
       whisper-live-buzzer-frequency 8000
       whisper-live-buzzer-volume 0.1
@@ -375,8 +377,8 @@ A subtle beep plays every time a new chunk is recorded, providing audio confirma
       whisper-live-context-chunks 3
       whisper-live-number-chunks t
       whisper-live-chunk-format "[%d] %s\n"
-      whisper-live-delta-overlap-words 10
-      whisper-live-min-delta-chars 3
+      whisper-live-transcription-mode 'accumulative
+      whisper-live-accumulative-revise-text t
       whisper-live-audio-feedback t
       whisper-live-buzzer-frequency 8000
       whisper-live-buzzer-volume 0.1
